@@ -1,36 +1,12 @@
-// pub trait UpdateField {
-// // fn update_field(&mut self, tag: &Tag, doc: &Document) {
-// // let field_name = &tag.name.local_part;
-// // if let Some(attributes) = &tag.attributes {
-// // attributes.iter().for_each(|attr| {
-// // if let Attribute::Instance { name, value } = attr {
-// // match value {
-// // AttributeValue::Value(attr_val) => {
-// // if name.local_part == "isbn" {
-// // self.isbn = attr_val.to_string();
-// // }
-// // }
-// // AttributeValue::Values(values) => values.iter().for_each(|val| {
-// // if name.local_part == "isbn" {
-// // self.isbn = val.to_string();
-// // }
-// // }),
-// // _ => {}
-// // }
-// // }
-// // })
-// // }
-// // }
-// }
 mod utils;
 
-use syn::Attribute;
+use proc_macro2::TokenStream;
+use quote::quote;
+use syn::Ident;
 use utils::fields_extraction::{get_fields, AttributedFields, NonAttributedFields};
 
-use proc_macro::TokenStream;
-
 #[proc_macro_derive(UpdateFields, attributes(update))]
-pub fn derive_macro(input: TokenStream) -> TokenStream {
+pub fn derive_macro(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
     let name = &ast.ident;
 
@@ -51,59 +27,102 @@ pub fn derive_macro(input: TokenStream) -> TokenStream {
         Err(e) => return e.to_compile_error().into(),
     }
 
-    let attributed_fields_fields = &attributed_fields.fields;
-    let attributed_fields_ty = &attributed_fields.ty;
-    let non_attributed_fields_fields = &non_attributed_fields.fields;
-    let non_attributed_fields_ty = &non_attributed_fields.ty;
+    fn is_numeric_type(ty: &Ident) -> bool {
+        matches!(
+            ty.to_string().as_str(),
+            "i8" | "i16"
+                | "i32"
+                | "i64"
+                | "i128"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "u128"
+                | "f32"
+                | "f64"
+        )
+    }
 
-    let gen = quote::quote! {
-        impl UpdateField for #name {
-            fn update_field(&mut self, tag: &Tag, doc: &Document) {
-                let field_name = &tag.name.local_part;
-                if let Some(attributes) = &tag.attributes {
-                    attributes.iter().for_each(|attr| {
-                        if let Attribute::Instance { name, value: AttributeValue::Value(attr_val) } = attr {
-                            match name.local_part.as_str() {
-                                #(
-                                    stringify!(#attributed_fields_fields) => {
-                                        if name.local_part == stringify!(#attributed_fields_fields) {
-                                            self.#attributed_fields_fields = attr_val.to_string();
-                                        }
-                                    }
-                                )*
-                                _ => {
-                                    eprintln!("Unknown attribute: {}", name.local_part);
-                                }
-                            }
-                        }
-                    });
+    pub fn generate_update_field_impl(
+        struct_name: &Ident,
+        non_attributed_fields: &mut NonAttributedFields,
+        attributed_fields: &mut AttributedFields,
+    ) -> TokenStream {
+        let attributed_fields_match_arms = attributed_fields.fields.iter().map(|field_name| {
+            quote! {
+                stringify!(#field_name) => {
+                    self.#field_name = attr_val.into();
                 }
+            }
+        });
 
-                if let Document::Nested(_) = &doc {
-                    doc.iter_with_depth(1).for_each(|record| {
-                        if let Document::Element(tag, inner_doc, _) = record {
-                            self.update_field(tag, inner_doc);
-                        } else {
-                            eprintln!("Unknown field: {record:#?}");
-                        }
-                    });
-                } else if let Document::Content(Some(value)) = &doc {
-                    match field_name.as_str() {
-                        #(
-                            stringify!(#non_attributed_fields_fields) => {
-                                self.#non_attributed_fields_fields = value.to_string();
-                            }
-                        )*
-                        e => {
-                            eprintln!("Unknown field: {}", e);
+        let non_attributed_fields_match_arms = non_attributed_fields
+            .fields
+            .iter()
+            .zip(non_attributed_fields.ty.iter())
+            .map(|(field_name, field_type)| {
+                if is_numeric_type(field_type) {
+                    quote! {
+                        stringify!(#field_name) => {
+                            self.#field_name = value.parse::<#field_type>().unwrap();
                         }
                     }
                 } else {
-                    eprintln!("Content is missing");
+                    quote! {
+                        stringify!(#field_name) => {
+                            self.#field_name = value.to_string();
+                        }
+                    }
+                }
+            });
+
+        quote! {
+            impl UpdateField for #struct_name {
+                fn update_field(&mut self, tag: &Tag, doc: &Document) {
+                    let field_name = &tag.name.local_part;
+                    if let Some(attributes) = &tag.attributes {
+                        attributes.iter().for_each(|attr| {
+                            if let Attribute::Instance { name, value: AttributeValue::Value(attr_val) } = attr {
+                                match name.local_part.as_str() {
+                                    #(#attributed_fields_match_arms,)*
+                                    _ => {
+                                        eprintln!("Unknown attribute: {}", name.local_part);
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    if let Document::Nested(_) = &doc {
+                        doc.iter_with_depth(1).for_each(|record| {
+                            if let Document::Element(tag, inner_doc, _) = record {
+                                self.update_field(tag, inner_doc);
+                            } else {
+                                eprintln!("Unknown field: {record:#?}");
+                            }
+                        });
+                    } else if let Document::Content(Some(value)) = &doc {
+                        match field_name.as_str() {
+                            #(#non_attributed_fields_match_arms,)*
+                            e => {
+                                eprintln!("Unknown field: {}", e);
+                            }
+                        }
+                    } else {
+                        eprintln!("Content is missing");
+                    }
                 }
             }
         }
-    };
+    }
+
     //dbg!(&gen);
-    gen.into()
+    let gen_update_field =
+        generate_update_field_impl(name, non_attributed_fields, attributed_fields);
+    let combined_gen = quote::quote! {
+        //#update_field_gen
+        #gen_update_field
+    };
+    combined_gen.into()
 }

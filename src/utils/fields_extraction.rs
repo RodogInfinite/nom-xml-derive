@@ -1,16 +1,16 @@
-use proc_macro2::{Span, TokenStream, TokenTree};
-use quote::ToTokens;
+use proc_macro2::{Span, TokenTree};
+
 use syn::{
     AttrStyle, Attribute, Field, Fields, Ident, MacroDelimiter, Meta, MetaList, Path, PathSegment,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct NonAttributedFields {
     pub fields: Vec<Ident>,
     pub ty: Vec<Ident>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct AttributedFields {
     pub fields: Vec<Ident>,
     pub ty: Vec<Ident>,
