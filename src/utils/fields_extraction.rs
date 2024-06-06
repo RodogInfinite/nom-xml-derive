@@ -16,28 +16,6 @@ pub struct AttributedFields {
     pub ty: Vec<Ident>,
 }
 
-impl ToTokens for NonAttributedFields {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        for field in &self.fields {
-            field.to_tokens(tokens);
-        }
-        for ty in &self.ty {
-            ty.to_tokens(tokens);
-        }
-    }
-}
-
-impl ToTokens for AttributedFields {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        for field in &self.fields {
-            field.to_tokens(tokens);
-        }
-        for ty in &self.ty {
-            ty.to_tokens(tokens);
-        }
-    }
-}
-
 pub fn get_fields(
     attributed_fields: &mut AttributedFields,
     non_atributed_fields: &mut NonAttributedFields,
