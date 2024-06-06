@@ -1,0 +1,19 @@
+[package]
+name = "nom-xml-derive"
+version = "0.0.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+keywords = ["xml","derive","nom-xml"]
+categories = ["parsing","encoding","decoding"]
+description = "A Rust crate for simplifying the process of extracting `nom-xml` Documents into various Rust data types."
+repository = "https://github.com/RodogInfinite/binary_type_cast"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+nom-xml = "0.2.1"
+proc-macro2 = "1.0.85"
+quote = "1.0.26"
+syn = {version = "2.0.66", features = ["extra-traits","derive"]}
+
