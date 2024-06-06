@@ -10,9 +10,6 @@ pub fn derive_macro(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
     let name = &ast.ident;
 
-    //dbg!(name);
-    //dbg!(ast.data);
-
     let attributed_fields = &mut AttributedFields::default();
     let non_attributed_fields = &mut NonAttributedFields::default();
 
@@ -117,11 +114,10 @@ pub fn derive_macro(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         }
     }
 
-    //dbg!(&gen);
     let gen_update_field =
         generate_update_field_impl(name, non_attributed_fields, attributed_fields);
     let combined_gen = quote::quote! {
-        //#update_field_gen
+
         #gen_update_field
     };
     combined_gen.into()

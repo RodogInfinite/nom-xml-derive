@@ -21,7 +21,6 @@ pub fn get_fields(
     non_atributed_fields: &mut NonAttributedFields,
     data_struct: syn::DataStruct,
 ) -> Result<(), syn::Error> {
-    // dbg!(&data_struct);
     if let Fields::Named(fields) = &data_struct.fields {
         fields.named.iter().try_for_each(|field| {
             if let Field {
