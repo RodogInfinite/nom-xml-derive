@@ -16,7 +16,6 @@ pub fn derive_macro(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let sub_fields = &mut FieldTypes::<SubField>::default();
     let vec_fields = &mut FieldTypes::<VecField>::default();
 
-    let std_types = get_standard_library_types();
     match get_fields(
         attributed_fields,
         non_attributed_fields,
@@ -29,7 +28,7 @@ pub fn derive_macro(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     }
 
     //TODO: Test unknown attribute error by adding an attribute to an author field and seeing if that is thrown if the attribute is not defined in the book struct
-
+    let std_types = get_standard_library_types();
     let gen_update_fields = match generate_update_fields(
         name,
         attributed_fields,
