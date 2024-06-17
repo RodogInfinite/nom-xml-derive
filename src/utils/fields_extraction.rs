@@ -180,8 +180,13 @@ fn extract_segments(
         .try_for_each(|PathSegment { ident, arguments }| {
             if let Some(field_ident) = ctx.field_ident {
                 if !ctx.attrs.is_empty() {
-                    ctx.attributed_fields.fields.push(field_ident.clone());
-                    ctx.attributed_fields.tys.push(ident.clone());
+                    if ident == "Option" {
+                        ctx.attributed_opt_fields.fields.push(field_ident.clone());
+                        ctx.attributed_opt_fields.tys.push(field_ident.clone());
+                    }else {
+                        ctx.attributed_fields.fields.push(field_ident.clone());
+                        ctx.attributed_fields.tys.push(field_ident.clone());
+                    }
                     Ok(())
                 } else {
                     let ty_ident = ident;
@@ -339,7 +344,6 @@ fn extract_optional_arguments(
                             ctx.non_attributed_opt_fields.tys.push(ident.clone());
                             Ok(())
                         } else {
-                          
                             extract_arguments(
                                 arguments,
                                 field_ident,

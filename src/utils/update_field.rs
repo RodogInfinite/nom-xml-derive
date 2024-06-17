@@ -62,6 +62,45 @@ fn generate_attributed_fields(attributed_fields: &FieldTypes<Attributed>) -> Opt
     }
 }
 
+fn generate_attribute_opt_fields(
+    attributed_opt_fields: &FieldTypes<OptionField>,
+) -> Option<TokenStream> {
+    if attributed_opt_fields.fields.is_empty() {
+        None
+    } else {
+        let gen_attributed_opt_fields: Vec<TokenStream> = attributed_opt_fields
+            .fields
+            .iter()
+            .map(|field_name| {
+                quote! {
+                    stringify!(#field_name) => {
+                        self.#field_name = Some(attr_val.to_string());
+                        Ok(())
+                    }
+                }
+            })
+            .collect();
+
+        Some(quote! {
+            if let Some(attributes) = &tag.attributes {
+                attributes.iter().try_for_each(|attr| -> Result<()> {
+                    if let Attribute::Instance {
+                        name,
+                        value: AttributeValue::Value(attr_val),
+                    } = attr {
+                        match name.local_part.as_str() {
+                            #(#gen_attributed_opt_fields,)*
+                            e => Err(format!("Unknown attribute: {}\n{}", name.local_part, e).into()),
+                        }
+                    } else {
+                        Err(format!("Unknown attribute: {:#?}", attributes).into())
+                    }
+                })?;
+            }
+        })
+    }
+}
+
 fn generate_sub_fields(sub_fields: &FieldTypes<SubField>) -> Option<TokenStream> {
     if sub_fields.fields.is_empty() {
         None
@@ -290,14 +329,19 @@ pub fn generate_update_fields(
     std_types: &HashSet<Ident>,
 ) -> Result<TokenStream, syn::Error> {
     let gen_attributed_fields = generate_attributed_fields(attributed_fields);
-    let gen_non_attributed_opt_fields =
-        generate_non_attributed_opt_fields(non_attributed_opt_fields, std_types)?;
+    let gen_attributed_opt_fields = generate_attribute_opt_fields(attributed_opt_fields);
+
     let gen_non_attributed_fields =
         generate_non_attributed_fields(non_attributed_fields, std_types)?;
+    let gen_non_attributed_opt_fields =
+        generate_non_attributed_opt_fields(non_attributed_opt_fields, std_types)?;
+
     let gen_sub_fields = generate_sub_fields(sub_fields);
     let gen_sub_opt_fields = generate_sub_opt_fields(sub_opt_fields);
+
     let vec_field_names = vec_fields.fields.clone();
     let vec_field_types = vec_fields.tys.clone();
+
     let gen_vec_fields = generate_vec_fields(vec_field_names, vec_field_types);
 
     let combined_non_attributed_fields = combine_non_attributed_fields(gen_non_attributed_fields);
@@ -328,6 +372,20 @@ pub fn generate_update_fields(
                     }
                 }
             })
+        } else if let Some(gen_attribute_opt) = gen_attributed_opt_fields {
+            Ok(quote! {
+                impl UpdateField for #struct_name {
+                    fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
+                        let field_name = &tag.name.local_part;
+                        #gen_attribute_opt
+                        match (tag.name.local_part.as_str(), doc) {
+                            #(#arms)*
+
+                            _ => Err(format!("Content is missing or unknown field `{}`", tag.name.local_part.as_str()).into()),
+                        }
+                    }
+                }
+            })
         } else {
             Ok(quote! {
             impl UpdateField for #struct_name {
@@ -345,6 +403,16 @@ pub fn generate_update_fields(
                 fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
                     let field_name = &tag.name.local_part;
                     #gen_attribute
+                    Ok(())
+                }
+            }
+        })
+    } else if let Some(gen_attribute_opt) = gen_attributed_opt_fields {
+        Ok(quote! {
+            impl UpdateField for #struct_name {
+                fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
+                    let field_name = &tag.name.local_part;
+                    #gen_attribute_opt
                     Ok(())
                 }
             }
