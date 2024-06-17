@@ -3,12 +3,13 @@ use std::{collections::HashSet, marker::PhantomData};
 use proc_macro2::{Span, TokenTree};
 
 use syn::{
-    punctuated::Punctuated, token::PathSep, AngleBracketedGenericArguments, AttrStyle, Attribute,
-    Field, Fields, GenericArgument, Ident, MacroDelimiter, Meta, MetaList, Path, PathArguments,
-    PathSegment,
+    punctuated::Punctuated, token::PathSep, AngleBracketedGenericArguments, AttrStyle, Attribute, DeriveInput, Field, Fields, GenericArgument, Ident, MacroDelimiter, Meta, MetaList, Path, PathArguments, PathSegment
 };
 
 use crate::utils::update_field::is_numeric_type;
+
+use super::update_field::FieldParameters;
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Attributed;
 
@@ -30,17 +31,21 @@ pub struct FieldTypes<State> {
     state: PhantomData<State>,
 }
 
-pub fn get_fields(
-    attributed_fields: &mut FieldTypes<Attributed>,
-    non_attributed_fields: &mut FieldTypes<NonAttributed>,
-    sub_fields: &mut FieldTypes<SubField>,
-    sub_opt_fields: &mut FieldTypes<OptionField>,
-    vec_fields: &mut FieldTypes<VecField>,
-    attributed_opt_fields: &mut FieldTypes<OptionField>,
-    non_attributed_opt_fields: &mut FieldTypes<OptionField>,
-    std_types: &HashSet<Ident>,
-    ast: &syn::DeriveInput,
+pub fn get_fields<'a>(
+    params: &mut FieldParameters<'a>,
+    ast: &'a DeriveInput,
 ) -> Result<(), syn::Error> {
+    let FieldParameters {
+        struct_name: _,
+        attributed_fields,
+        non_attributed_fields,
+        sub_fields,
+        sub_opt_fields,
+        vec_fields,
+        attributed_opt_fields,
+        non_attributed_opt_fields,
+        std_types,
+    } = params;
     if let syn::DeriveInput {
         attrs: _,
         vis: _,

@@ -74,7 +74,7 @@ fn generate_attribute_opt_fields(
             .map(|field_name| {
                 quote! {
                     stringify!(#field_name) => {
-                        self.#field_name = Some(attr_val.to_string());
+                        self.#field_name = Some(attr_val.into());
                         Ok(())
                     }
                 }
@@ -180,114 +180,109 @@ fn generate_sub_opt_fields(sub_opt_fields: &FieldTypes<OptionField>) -> Option<T
 fn generate_non_attributed_fields(
     non_attributed_fields: &FieldTypes<NonAttributed>,
     std_types: &HashSet<Ident>,
-) -> Result<Option<Vec<TokenStream>>, syn::Error> {
+) -> Result<Option<TokenStream>, syn::Error> {
     if non_attributed_fields.fields.is_empty() {
         Ok(None)
     } else {
-        Ok(Some(
-            non_attributed_fields
-                .fields
-                .iter()
-                .zip(non_attributed_fields.tys.iter())
-                .map(|(field_name, field_type)| {
-                    if std_types.contains(field_type) {
-                        match field_type.to_string().as_str() {
-                            "String" => Ok(quote! {
-                                (stringify!(#field_name), Document::Content(Some(value))) => {
-                                    self.#field_name = value.to_string();
-                                    Ok(())
-                                }
-                            }),
-                            _ => Err(syn::Error::new(
-                                Span::call_site(),
-                                format!("Unimplemented Type Found: `{field_type:?}`"),
-                            )),
-                        }
-                    } else if is_numeric_type(field_type) {
-                        Ok(quote! {
+        let fields: Vec<TokenStream> = non_attributed_fields
+            .fields
+            .iter()
+            .zip(non_attributed_fields.tys.iter())
+            .map(|(field_name, field_type)| {
+                if std_types.contains(field_type) {
+                    match field_type.to_string().as_str() {
+                        "String" => Ok(quote! {
                             (stringify!(#field_name), Document::Content(Some(value))) => {
-                                self.#field_name = value.parse::<#field_type>()?;
+                                self.#field_name = value.to_string();
                                 Ok(())
                             }
-                        })
-                    } else {
-                        Err(syn::Error::new(
+                        }),
+                        _ => Err(syn::Error::new(
                             Span::call_site(),
-                            format!("Unknown Field: `{field_name:?}`"),
-                        ))
+                            format!("Unimplemented Type Found: `{field_type:?}`"),
+                        )),
                     }
-                })
-                .collect::<Result<Vec<TokenStream>, syn::Error>>()?,
-        ))
-    }
-}
-fn combine_non_attributed_fields(
-    non_attributed_fields: Option<Vec<TokenStream>>,
-) -> Option<TokenStream> {
-    non_attributed_fields.map(|non_attributed_fields| {
-        quote! {
-            #(#non_attributed_fields)*
+                } else if is_numeric_type(field_type) {
+                    Ok(quote! {
+                        (stringify!(#field_name), Document::Content(Some(value))) => {
+                            self.#field_name = value.parse::<#field_type>()?;
+                            Ok(())
+                        }
+                    })
+                } else {
+                    Err(syn::Error::new(
+                        Span::call_site(),
+                        format!("Unknown Field: `{field_name:?}`"),
+                    ))
+                }
+            })
+            .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
+
+        if fields.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(quote! {
+                #(#fields)*
+            }))
         }
-    })
-}
-fn generate_non_attributed_opt_fields(
-    non_attributed_opt_fields: &FieldTypes<OptionField>,
-    std_types: &HashSet<Ident>,
-) -> Result<Option<Vec<TokenStream>>, syn::Error> {
-    if non_attributed_opt_fields.fields.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(
-            non_attributed_opt_fields
-                .fields
-                .iter()
-                .zip(non_attributed_opt_fields.tys.iter())
-                .map(|(field_name, field_type)| {
-                    if std_types.contains(field_type) {
-                        match field_type.to_string().as_str() {
-                            "String" => Ok(quote! {
-                                (stringify!(#field_name), Document::Content(Some(value))) => {
-                                    self.#field_name = Some(value.to_string());
-                                    Ok(())
-                                }
-                            }),
-                            _ => Err(syn::Error::new(
-                                Span::call_site(),
-                                format!("Unimplemented Type Found: `{field_type:?}`"),
-                            )),
-                        }
-                    } else if is_numeric_type(field_type) {
-                        Ok(quote! {
-                            (stringify!(#field_name), Document::Content(Some(value))) => {
-                                self.#field_name = Some(value.parse::<#field_type>()?);
-                                Ok(())
-                            }
-                        })
-                    } else {
-                        Err(syn::Error::new(
-                            Span::call_site(),
-                            format!("Unknown Field: `{field_name:?}`"),
-                        ))
-                    }
-                })
-                .collect::<Result<Vec<TokenStream>, syn::Error>>()?,
-        ))
     }
 }
 
-fn combine_non_attributed_opt_fields(
-    non_attributed_opt_fields: Option<Vec<TokenStream>>,
-) -> Option<TokenStream> {
-    non_attributed_opt_fields.map(|non_attributed_opt_fields| {
-        quote! {
-            #(#non_attributed_opt_fields)*
+fn generate_non_attributed_opt_fields(
+    non_attributed_opt_fields: &FieldTypes<OptionField>,
+    std_types: &HashSet<Ident>,
+) -> Result<Option<TokenStream>, syn::Error> {
+    if non_attributed_opt_fields.fields.is_empty() {
+        Ok(None)
+    } else {
+        let fields: Vec<TokenStream> = non_attributed_opt_fields
+            .fields
+            .iter()
+            .zip(non_attributed_opt_fields.tys.iter())
+            .map(|(field_name, field_type)| {
+                if std_types.contains(field_type) {
+                    match field_type.to_string().as_str() {
+                        "String" => Ok(quote! {
+                            (stringify!(#field_name), Document::Content(Some(value))) => {
+                                self.#field_name = Some(value.to_string());
+                                Ok(())
+                            }
+                        }),
+                        _ => Err(syn::Error::new(
+                            Span::call_site(),
+                            format!("Unimplemented Type Found: `{field_type:?}`"),
+                        )),
+                    }
+                } else if is_numeric_type(field_type) {
+                    Ok(quote! {
+                        (stringify!(#field_name), Document::Content(Some(value))) => {
+                            self.#field_name = Some(value.parse::<#field_type>()?);
+                            Ok(())
+                        }
+                    })
+                } else {
+                    Err(syn::Error::new(
+                        Span::call_site(),
+                        format!("Unknown Field: `{field_name:?}`"),
+                    ))
+                }
+            })
+            .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
+
+        if fields.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(quote! {
+                #(#fields)*
+            }))
         }
-    })
+    }
 }
-fn generate_vec_fields(
-    vec_field_names: Vec<Ident>,
-    vec_field_types: Vec<Ident>,
-) -> Option<TokenStream> {
+
+fn generate_vec_fields(vec_fields: &mut FieldTypes<VecField>) -> Option<TokenStream> {
+    let vec_field_names = vec_fields.fields.clone();
+    let vec_field_types = vec_fields.tys.clone();
+
     if vec_field_names.is_empty() {
         None
     } else {
@@ -297,7 +292,7 @@ fn generate_vec_fields(
                     if let Document::Element(_, doc, _) = element {
                         let mut nested_field = #vec_field_types::default();
                         if let Document::Nested(inner_elements) = doc.as_ref() {
-                            inner_elements.iter().try_for_each(|inner_element|-> Result<()> {
+                            inner_elements.iter().try_for_each(|inner_element| -> Result<()> {
                                 if let Document::Element(tag, content, _) = inner_element {
                                     nested_field.update_field(tag, content)?;
                                 }
@@ -317,17 +312,32 @@ fn generate_vec_fields(
     }
 }
 
+pub struct FieldParameters<'a> {
+    pub struct_name: &'a Ident,
+    pub attributed_fields: &'a mut FieldTypes<Attributed>,
+    pub non_attributed_fields: &'a mut FieldTypes<NonAttributed>,
+    pub sub_fields: &'a mut FieldTypes<SubField>,
+    pub sub_opt_fields: &'a mut FieldTypes<OptionField>,
+    pub vec_fields: &'a mut FieldTypes<VecField>,
+    pub attributed_opt_fields: &'a mut FieldTypes<OptionField>,
+    pub non_attributed_opt_fields: &'a mut FieldTypes<OptionField>,
+    pub std_types: &'a HashSet<Ident>,
+}
+
 pub fn generate_update_fields(
-    struct_name: &Ident,
-    attributed_fields: &mut FieldTypes<Attributed>,
-    non_attributed_fields: &mut FieldTypes<NonAttributed>,
-    sub_fields: &mut FieldTypes<SubField>,
-    sub_opt_fields: &mut FieldTypes<OptionField>,
-    vec_fields: &mut FieldTypes<VecField>,
-    attributed_opt_fields: &mut FieldTypes<OptionField>,
-    non_attributed_opt_fields: &mut FieldTypes<OptionField>,
-    std_types: &HashSet<Ident>,
+    field_parameters: &mut FieldParameters,
 ) -> Result<TokenStream, syn::Error> {
+    let FieldParameters {
+        struct_name,
+        attributed_fields,
+        non_attributed_fields,
+        sub_fields,
+        sub_opt_fields,
+        vec_fields,
+        attributed_opt_fields,
+        non_attributed_opt_fields,
+        std_types,
+    } = field_parameters;
     let gen_attributed_fields = generate_attributed_fields(attributed_fields);
     let gen_attributed_opt_fields = generate_attribute_opt_fields(attributed_opt_fields);
 
@@ -339,55 +349,40 @@ pub fn generate_update_fields(
     let gen_sub_fields = generate_sub_fields(sub_fields);
     let gen_sub_opt_fields = generate_sub_opt_fields(sub_opt_fields);
 
-    let vec_field_names = vec_fields.fields.clone();
-    let vec_field_types = vec_fields.tys.clone();
+    let gen_vec_fields = generate_vec_fields(vec_fields);
 
-    let gen_vec_fields = generate_vec_fields(vec_field_names, vec_field_types);
-
-    let combined_non_attributed_fields = combine_non_attributed_fields(gen_non_attributed_fields);
-    let combined_non_attributed_opt_fields =
-        combine_non_attributed_opt_fields(gen_non_attributed_opt_fields);
-    let arms: Vec<Option<TokenStream>> = vec![
-        combined_non_attributed_fields,
-        combined_non_attributed_opt_fields,
+    let arms: Vec<TokenStream> = vec![
+        gen_non_attributed_fields,
+        gen_non_attributed_opt_fields,
         gen_vec_fields,
         gen_sub_fields,
         gen_sub_opt_fields,
-    ];
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
-    let arms = arms.into_iter().flatten();
+    let attribute_arms: Vec<TokenStream> = vec![gen_attributed_fields, gen_attributed_opt_fields]
+        .into_iter()
+        .flatten()
+        .collect();
 
-    if arms.clone().count() > 0 {
-        if let Some(gen_attribute) = gen_attributed_fields {
-            Ok(quote! {
-                impl UpdateField for #struct_name {
-                    fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
-                        let field_name = &tag.name.local_part;
-                        #gen_attribute
-                        match (tag.name.local_part.as_str(), doc) {
-                            #(#arms)*
+    let gen_impl = if !attribute_arms.is_empty() {
+        quote! {
+            impl UpdateField for #struct_name {
+                fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
+                    let field_name = &tag.name.local_part;
+                    #(#attribute_arms)*
+                    match (tag.name.local_part.as_str(), doc) {
+                        #(#arms)*
 
-                            _ => Err(format!("Content is missing or unknown field `{}`", tag.name.local_part.as_str()).into()),
-                        }
+                        _ => Err(format!("Content is missing or unknown field `{}`", tag.name.local_part.as_str()).into()),
                     }
                 }
-            })
-        } else if let Some(gen_attribute_opt) = gen_attributed_opt_fields {
-            Ok(quote! {
-                impl UpdateField for #struct_name {
-                    fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
-                        let field_name = &tag.name.local_part;
-                        #gen_attribute_opt
-                        match (tag.name.local_part.as_str(), doc) {
-                            #(#arms)*
-
-                            _ => Err(format!("Content is missing or unknown field `{}`", tag.name.local_part.as_str()).into()),
-                        }
-                    }
-                }
-            })
-        } else {
-            Ok(quote! {
+            }
+        }
+    } else {
+        quote! {
             impl UpdateField for #struct_name {
                 fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
                     let field_name = &tag.name.local_part;
@@ -395,28 +390,13 @@ pub fn generate_update_fields(
                         #(#arms)*
                         _ => Err(format!("Content is missing or unknown field `{}`", tag.name.local_part.as_str()).into()),
                     }
-                }}})
+                }
+            }
         }
-    } else if let Some(gen_attribute) = gen_attributed_fields {
-        Ok(quote! {
-            impl UpdateField for #struct_name {
-                fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
-                    let field_name = &tag.name.local_part;
-                    #gen_attribute
-                    Ok(())
-                }
-            }
-        })
-    } else if let Some(gen_attribute_opt) = gen_attributed_opt_fields {
-        Ok(quote! {
-            impl UpdateField for #struct_name {
-                fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
-                    let field_name = &tag.name.local_part;
-                    #gen_attribute_opt
-                    Ok(())
-                }
-            }
-        })
+    };
+
+    if !attribute_arms.is_empty() || !arms.is_empty() {
+        Ok(gen_impl)
     } else {
         Err(syn::Error::new(
             Span::call_site(),
