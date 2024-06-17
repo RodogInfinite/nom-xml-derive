@@ -25,9 +25,7 @@ pub fn is_numeric_type(ty: &Ident) -> bool {
     )
 }
 
-fn generate_attributed_fields(
-    attributed_fields: &FieldTypes<Attributed>,
-) -> Option<proc_macro2::TokenStream> {
+fn generate_attributed_fields(attributed_fields: &FieldTypes<Attributed>) -> Option<TokenStream> {
     if attributed_fields.fields.is_empty() {
         None
     } else {
@@ -184,7 +182,15 @@ fn generate_non_attributed_fields(
         ))
     }
 }
-
+fn combine_non_attributed_fields(
+    non_attributed_fields: Option<Vec<TokenStream>>,
+) -> Option<TokenStream> {
+    non_attributed_fields.map(|non_attributed_fields| {
+        quote! {
+            #(#non_attributed_fields)*
+        }
+    })
+}
 fn generate_non_attributed_opt_fields(
     non_attributed_opt_fields: &FieldTypes<OptionField>,
     std_types: &HashSet<Ident>,
@@ -230,6 +236,15 @@ fn generate_non_attributed_opt_fields(
     }
 }
 
+fn combine_non_attributed_opt_fields(
+    non_attributed_opt_fields: Option<Vec<TokenStream>>,
+) -> Option<TokenStream> {
+    non_attributed_opt_fields.map(|non_attributed_opt_fields| {
+        quote! {
+            #(#non_attributed_opt_fields)*
+        }
+    })
+}
 fn generate_vec_fields(
     vec_field_names: Vec<Ident>,
     vec_field_types: Vec<Ident>,
@@ -263,594 +278,6 @@ fn generate_vec_fields(
     }
 }
 
-fn generate_update_fields_sub_quotes(
-    struct_name: &Ident,
-    attributed_fields: &mut FieldTypes<Attributed>,
-    non_attributed_fields: &mut FieldTypes<NonAttributed>,
-    sub_fields: &mut FieldTypes<SubField>,
-    sub_opt_fields: &mut FieldTypes<OptionField>,
-    vec_fields: &mut FieldTypes<VecField>,
-    attributed_opt_fields: &mut FieldTypes<OptionField>,
-    non_attributed_opt_fields: &mut FieldTypes<OptionField>,
-    std_types: &HashSet<Ident>,
-) -> Result<Option<TokenStream>, syn::Error> {
-    let gen_attributed_fields = generate_attributed_fields(attributed_fields);
-    let gen_non_attributed_opt_fields =
-        generate_non_attributed_opt_fields(non_attributed_opt_fields, std_types)?;
-    let gen_non_attributed_fields =
-        generate_non_attributed_fields(non_attributed_fields, std_types)?;
-    let gen_sub_fields = generate_sub_fields(sub_fields);
-    let gen_sub_opt_fields = generate_sub_opt_fields(sub_opt_fields);
-    let vec_field_names = vec_fields.fields.clone();
-    let vec_field_types = vec_fields.tys.clone();
-    let gen_vec_fields = generate_vec_fields(vec_field_names, vec_field_types);
-    let gen_content: Option<TokenStream> = match (
-        &gen_attributed_fields,
-        &gen_non_attributed_fields,
-        &gen_non_attributed_opt_fields,
-        &gen_vec_fields,
-        &gen_sub_fields,
-        &gen_sub_opt_fields,
-    ) {
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_sub_fields),
-            Some(gen_vec_fields),
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                #gen_sub_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            None,
-            None,
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            None,
-            None,
-            Some(gen_vec_fields),
-            Some(gen_sub_fields),
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #gen_vec_fields
-                #gen_sub_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            None,
-            None,
-            None,
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-           #gen_attributed_fields
-           match (tag.name.local_part.as_str(), doc){
-                #(#gen_non_attributed_fields)*
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            None,
-            Some(gen_non_attributed_opt_fields),
-            None,
-            None,
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-           #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_opt_fields)*
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            None,
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_vec_fields),
-            None,
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            None,
-            Some(gen_sub_fields),
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_sub_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-
-        (
-            Some(gen_attributed_fields),
-            None,
-            Some(gen_non_attributed_opt_fields),
-            None,
-            Some(gen_sub_fields),
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_opt_fields)*
-                #gen_sub_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            None,
-            Some(gen_vec_fields),
-            None,
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #gen_vec_fields
-                #gen_sub_opt_fields
-                e => Err(format!("Unknown field in {}: {:?}", stringify!(#struct_name), e).into()),
-            }
-        }),
-
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_vec_fields),
-            None,
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                #gen_sub_opt_fields
-                e => Err(format!("Unknown field in {}: {:?}", stringify!(#struct_name), e).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            None,
-            None,
-            None,
-            Some(gen_sub_fields),
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #gen_sub_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-
-        }),
-
-        (
-            None,
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_sub_fields),
-            Some(gen_vec_fields),
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                #gen_sub_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            None,
-            None,
-            None,
-            Some(gen_vec_fields),
-            Some(gen_sub_fields),
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #gen_vec_fields
-                #gen_sub_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (None, Some(gen_non_attributed_fields), None, None, None, Some(gen_sub_opt_fields)) => {
-            Some(quote! {
-                match (tag.name.local_part.as_str(), doc){
-                    #(#gen_non_attributed_fields)*
-                    #gen_sub_opt_fields
-                    _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-                }
-            })
-        }
-        (None, None, Some(gen_non_attributed_opt_fields), None, None, Some(gen_sub_opt_fields)) => {
-            Some(quote! {
-                match (tag.name.local_part.as_str(), doc) {
-                    #(#gen_non_attributed_opt_fields)*
-                    #gen_sub_opt_fields
-                    _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-                }
-            })
-        }
-        (
-            None,
-            None,
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_vec_fields),
-            None,
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(),doc) {
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            None,
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            None,
-            Some(gen_sub_fields),
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_sub_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            None,
-            None,
-            Some(gen_non_attributed_opt_fields),
-            None,
-            Some(gen_sub_fields),
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_opt_fields)*
-                #gen_sub_fields
-                #gen_sub_opt_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            None,
-            Some(gen_non_attributed_fields),
-            None,
-            Some(gen_vec_fields),
-            None,
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #gen_vec_fields
-                #gen_sub_opt_fields
-                e => Err(format!("Unknown field in {}: {:?}", stringify!(#struct_name), e).into()),
-            }
-        }),
-        (
-            None,
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_vec_fields),
-            None,
-            Some(gen_sub_opt_fields),
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                #gen_sub_opt_fields
-                e => Err(format!("Unknown field in {}: {:?}", stringify!(#struct_name), e).into()),
-            }
-        }),
-        (None, None, None, None, Some(gen_sub_fields), Some(gen_sub_opt_fields)) => Some(quote! {
-            #gen_sub_fields
-            #gen_sub_opt_fields
-        }),
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_sub_fields),
-            Some(gen_vec_fields),
-            None,
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                #gen_sub_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            None,
-            None,
-            Some(gen_vec_fields),
-            Some(gen_sub_fields),
-            None,
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #gen_vec_fields
-                #gen_sub_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (Some(gen_attributed_fields), Some(gen_non_attributed_fields), None, None, None, None) => {
-            Some(quote! {
-               #gen_attributed_fields
-               match (tag.name.local_part.as_str(), doc){
-                    #(#gen_non_attributed_fields)*
-                    _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-                }
-            })
-        }
-        (
-            Some(gen_attributed_fields),
-            None,
-            Some(gen_non_attributed_opt_fields),
-            None,
-            None,
-            None,
-        ) => Some(quote! {
-           #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_opt_fields)*
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            None,
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_vec_fields),
-            None,
-            None,
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            None,
-            Some(gen_sub_fields),
-            None,
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_sub_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-
-        (
-            Some(gen_attributed_fields),
-            None,
-            Some(gen_non_attributed_opt_fields),
-            None,
-            Some(gen_sub_fields),
-            None,
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_opt_fields)*
-                #gen_sub_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            None,
-            Some(gen_vec_fields),
-            None,
-            None,
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #gen_vec_fields
-                e => Err(format!("Unknown field in {}: {:?}", stringify!(#struct_name), e).into()),
-            }
-        }),
-
-        (
-            Some(gen_attributed_fields),
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_vec_fields),
-            None,
-            None,
-        ) => Some(quote! {
-            #gen_attributed_fields
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                e => Err(format!("Unknown field in {}: {:?}", stringify!(#struct_name), e).into()),
-            }
-        }),
-        (Some(gen_attributed_fields), None, None, None, Some(gen_sub_fields), None) => {
-            Some(quote! {
-                #gen_attributed_fields
-                match (tag.name.local_part.as_str(), doc) {
-                    #gen_sub_fields
-                    _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-                }
-
-            })
-        }
-
-        (
-            None,
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_sub_fields),
-            Some(gen_vec_fields),
-            None,
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                #gen_sub_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (None, None, None, Some(gen_vec_fields), Some(gen_sub_fields), None) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #gen_vec_fields
-                #gen_sub_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (None, Some(gen_non_attributed_fields), None, None, None, None) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc){
-                #(#gen_non_attributed_fields)*
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (None, None, Some(gen_non_attributed_opt_fields), None, None, None) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_opt_fields)*
-
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (None, None, Some(gen_non_attributed_opt_fields), Some(gen_vec_fields), None, None) => {
-            Some(quote! {
-                match (tag.name.local_part.as_str(),doc) {
-                    #(#gen_non_attributed_opt_fields)*
-                    #gen_vec_fields
-                    _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-                }
-            })
-        }
-        (
-            None,
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            None,
-            Some(gen_sub_fields),
-            None,
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_sub_fields
-                _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-            }
-        }),
-        (None, None, Some(gen_non_attributed_opt_fields), None, Some(gen_sub_fields), None) => {
-            Some(quote! {
-                match (tag.name.local_part.as_str(), doc) {
-                    #(#gen_non_attributed_opt_fields)*
-                    #gen_sub_fields
-                    _ => Err(format!("Content is missing or unknown field `{}`",tag.name.local_part.as_str()).into()),
-                }
-            })
-        }
-        (None, Some(gen_non_attributed_fields), None, Some(gen_vec_fields), None, None) => {
-            Some(quote! {
-                match (tag.name.local_part.as_str(), doc) {
-                    #(#gen_non_attributed_fields)*
-                    #gen_vec_fields
-                    e => Err(format!("Unknown field in {}: {:?}", stringify!(#struct_name), e).into()),
-                }
-            })
-        }
-        (
-            None,
-            Some(gen_non_attributed_fields),
-            Some(gen_non_attributed_opt_fields),
-            Some(gen_vec_fields),
-            None,
-            None,
-        ) => Some(quote! {
-            match (tag.name.local_part.as_str(), doc) {
-                #(#gen_non_attributed_fields)*
-                #(#gen_non_attributed_opt_fields)*
-                #gen_vec_fields
-                e => Err(format!("Unknown field in {}: {:?}", stringify!(#struct_name), e).into()),
-            }
-        }),
-        (None, None, None, None, Some(gen_sub_fields), None) => Some(quote! {
-            #gen_sub_fields
-        }),
-        _ => None,
-    };
-
-    Ok(gen_content)
-}
-
 pub fn generate_update_fields(
     struct_name: &Ident,
     attributed_fields: &mut FieldTypes<Attributed>,
@@ -862,30 +289,70 @@ pub fn generate_update_fields(
     non_attributed_opt_fields: &mut FieldTypes<OptionField>,
     std_types: &HashSet<Ident>,
 ) -> Result<TokenStream, syn::Error> {
-    let sub_quotes = generate_update_fields_sub_quotes(
-        struct_name,
-        attributed_fields,
-        non_attributed_fields,
-        sub_fields,
-        sub_opt_fields,
-        vec_fields,
-        attributed_opt_fields,
-        non_attributed_opt_fields,
-        std_types,
-    )?;
+    let gen_attributed_fields = generate_attributed_fields(attributed_fields);
+    let gen_non_attributed_opt_fields =
+        generate_non_attributed_opt_fields(non_attributed_opt_fields, std_types)?;
+    let gen_non_attributed_fields =
+        generate_non_attributed_fields(non_attributed_fields, std_types)?;
+    let gen_sub_fields = generate_sub_fields(sub_fields);
+    let gen_sub_opt_fields = generate_sub_opt_fields(sub_opt_fields);
+    let vec_field_names = vec_fields.fields.clone();
+    let vec_field_types = vec_fields.tys.clone();
+    let gen_vec_fields = generate_vec_fields(vec_field_names, vec_field_types);
 
-    match sub_quotes {
-        Some(gen_content) => Ok(quote! {
+    let combined_non_attributed_fields = combine_non_attributed_fields(gen_non_attributed_fields);
+    let combined_non_attributed_opt_fields =
+        combine_non_attributed_opt_fields(gen_non_attributed_opt_fields);
+    let arms: Vec<Option<TokenStream>> = vec![
+        combined_non_attributed_fields,
+        combined_non_attributed_opt_fields,
+        gen_vec_fields,
+        gen_sub_fields,
+        gen_sub_opt_fields,
+    ];
+
+    let arms = arms.into_iter().flatten();
+
+    if arms.clone().count() > 0 {
+        if let Some(gen_attribute) = gen_attributed_fields {
+            Ok(quote! {
+                impl UpdateField for #struct_name {
+                    fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
+                        let field_name = &tag.name.local_part;
+                        #gen_attribute
+                        match (tag.name.local_part.as_str(), doc) {
+                            #(#arms)*
+
+                            _ => Err(format!("Content is missing or unknown field `{}`", tag.name.local_part.as_str()).into()),
+                        }
+                    }
+                }
+            })
+        } else {
+            Ok(quote! {
             impl UpdateField for #struct_name {
                 fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
                     let field_name = &tag.name.local_part;
-                    #gen_content
+                    match (tag.name.local_part.as_str(), doc) {
+                        #(#arms)*
+                        _ => Err(format!("Content is missing or unknown field `{}`", tag.name.local_part.as_str()).into()),
+                    }
+                }}})
+        }
+    } else if let Some(gen_attribute) = gen_attributed_fields {
+        Ok(quote! {
+            impl UpdateField for #struct_name {
+                fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
+                    let field_name = &tag.name.local_part;
+                    #gen_attribute
+                    Ok(())
                 }
             }
-        }),
-        _ => Err(syn::Error::new(
+        })
+    } else {
+        Err(syn::Error::new(
             Span::call_site(),
             "Error generating update fields",
-        )),
+        ))
     }
 }
