@@ -311,17 +311,144 @@ fn generate_vec_fields(vec_fields: &mut FieldTypes<VecField>) -> Option<TokenStr
         })
     }
 }
+fn generate_vec_sub_fields(vec_sub_fields: &FieldTypes<SubField>) -> Option<TokenStream> {
+    if vec_sub_fields.fields.is_empty() {
+        None
+    } else {
+        let gen_sub_opt_fields: Vec<TokenStream> = vec_sub_fields
+            .fields
+            .iter()
+            .zip(vec_sub_fields.tys.iter())
+            .map(|(field_name, field_type)| {
+                quote! {
+                    (stringify!(#field_name), Document::Nested(elements)) => {
+                        elements
+                        .iter()
+                        .try_for_each(|element| -> Result<()> {
+                            let mut nested_field = #field_type::default(); 
+                            if let Document::Element(tag, content, _) = element { 
+                                    if let Document::Nested(inner_elements) = content.as_ref() {
+                                        inner_elements.iter().try_for_each(
+                                            |inner_element| -> Result<()> {
+                                                if let Document::Element(inner_tag, inner_content, _) = inner_element {
+                                                    nested_field.update_field(inner_tag, inner_content)?;
+                                                }
+                                                Ok(())
+                                            },
+                                        ).or_else(|_| {
+                                            nested_field.update_field(tag,content)
+                                        })?;
+                                    }
+                                } 
+                                
+                            self.#field_name.push(nested_field.clone()); 
+                            Ok(())
+                        })?;
+                        Ok(())
+                    }
+                }
+            })
+            .collect();
+
+        Some(quote! {
+            #(#gen_sub_opt_fields,)*
+        })
+    }
+}
+
+
+fn generate_vec_opt_fields(vec_opt_fields: &mut FieldTypes<OptionField>) -> Option<TokenStream> {
+    let vec_field_names = vec_opt_fields.fields.clone();
+    let vec_field_types = vec_opt_fields.tys.clone();
+
+    if vec_field_names.is_empty() {
+        None
+    } else {
+        Some(quote! {
+            #((stringify!(#vec_field_names), Document::Nested(elements)) => {
+                elements.iter().try_for_each(|element| -> Result<()> {
+                    if let Document::Element(_, doc, _) = element {
+                        let mut nested_field = #vec_field_types::default();
+                        if let Document::Nested(inner_elements) = doc.as_ref() {
+                            inner_elements.iter().try_for_each(|inner_element| -> Result<()> {
+                                if let Document::Element(tag, content, _) = inner_element {
+                                    nested_field.update_field(tag, content)?;
+                                }
+                                Ok(())
+                            })?;
+                            self.#vec_field_names
+                                .get_or_insert_with(Vec::new)
+                                .push(nested_field);
+                            return Ok(());
+                        } else {
+                            return Err(format!("Content is missing in {:?}", stringify!(#vec_field_names)).into());
+                        }
+                    }
+                    Ok(())
+                })?;
+                Ok(())
+            },)*
+        })
+    }
+}
+fn generate_vec_opt_sub_fields(vec_opt_sub_fields: &FieldTypes<SubField>) -> Option<TokenStream> {
+    if vec_opt_sub_fields.fields.is_empty() {
+        None
+    } else {
+        let gen_sub_opt_fields: Vec<TokenStream> = vec_opt_sub_fields
+            .fields
+            .iter()
+            .zip(vec_opt_sub_fields.tys.iter())
+            .map(|(field_name, field_type)| {
+                quote! {
+                    (stringify!(#field_name), Document::Nested(elements)) => {
+                        let vec_field = self.#field_name.get_or_insert_with(Vec::new);
+                        elements.iter().try_for_each(|element| -> Result<()> {
+                            if let Document::Element(_, ref inner_doc, _) = element {
+                                let mut nested_field = #field_type::default(); //TODO: Check this
+                                if let Document::Nested(inner_elements) = inner_doc.as_ref() { 
+                                    inner_elements.iter().try_for_each(
+                                        |inner_element| -> Result<()> {
+                                            if let Document::Element(tag, content, _) = inner_element { 
+                                                nested_field.update_field(tag, content)?; 
+                                            }
+                                            Ok(())
+                                        },
+                                    )?;
+                                    vec_field.push(nested_field); 
+                                } else {
+                                    return Err("Content is missing in Author authors".into()); 
+                                }
+                            }
+                            Ok(())
+                        },
+                    )?;
+                    Ok(())
+                }
+                }
+            })
+            .collect();
+
+        Some(quote! {
+            #(#gen_sub_opt_fields,)*
+        })
+    }
+}
 
 pub struct FieldParameters<'a> {
     pub struct_name: &'a Ident,
     pub attributed_fields: &'a mut FieldTypes<Attributed>,
     pub non_attributed_fields: &'a mut FieldTypes<NonAttributed>,
     pub sub_fields: &'a mut FieldTypes<SubField>,
+    pub vec_sub_fields: &'a mut FieldTypes<SubField>,
     pub sub_opt_fields: &'a mut FieldTypes<OptionField>,
     pub vec_fields: &'a mut FieldTypes<VecField>,
+    pub vec_opt_fields: &'a mut FieldTypes<OptionField>,
+    pub vec_opt_sub_fields: &'a mut FieldTypes<SubField>,
     pub attributed_opt_fields: &'a mut FieldTypes<OptionField>,
     pub non_attributed_opt_fields: &'a mut FieldTypes<OptionField>,
     pub std_types: &'a HashSet<Ident>,
+    pub field_set: &'a mut Vec<String>,
 }
 
 pub fn generate_update_fields(
@@ -332,11 +459,15 @@ pub fn generate_update_fields(
         attributed_fields,
         non_attributed_fields,
         sub_fields,
+        vec_sub_fields,
         sub_opt_fields,
         vec_fields,
+        vec_opt_fields,
+        vec_opt_sub_fields,
         attributed_opt_fields,
         non_attributed_opt_fields,
         std_types,
+        field_set,
     } = field_parameters;
     let gen_attributed_fields = generate_attributed_fields(attributed_fields);
     let gen_attributed_opt_fields = generate_attribute_opt_fields(attributed_opt_fields);
@@ -350,11 +481,17 @@ pub fn generate_update_fields(
     let gen_sub_opt_fields = generate_sub_opt_fields(sub_opt_fields);
 
     let gen_vec_fields = generate_vec_fields(vec_fields);
+    let gen_vec_sub_fields = generate_vec_sub_fields(vec_sub_fields);
+    let gen_vec_opt_fields = generate_vec_opt_fields(vec_opt_fields);
+    let gen_vec_opt_sub_fields = generate_vec_opt_sub_fields(vec_opt_sub_fields);
 
     let arms: Vec<TokenStream> = vec![
         gen_non_attributed_fields,
         gen_non_attributed_opt_fields,
         gen_vec_fields,
+        gen_vec_sub_fields,
+        gen_vec_opt_fields,
+        gen_vec_opt_sub_fields,
         gen_sub_fields,
         gen_sub_opt_fields,
     ]
@@ -371,12 +508,13 @@ pub fn generate_update_fields(
         quote! {
             impl UpdateField for #struct_name {
                 fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
+                    let field_set: std::collections::HashSet<&str> = vec![#(#field_set),*].into_iter().collect();
                     let field_name = &tag.name.local_part;
                     #(#attribute_arms)*
                     match (tag.name.local_part.as_str(), doc) {
                         #(#arms)*
 
-                        _ => Err(format!("Content is missing or unknown field `{}`", tag.name.local_part.as_str()).into()),
+                        _ => Err(format!("Content is missing or unknown field `{}` in {}", tag.name.local_part.as_str(),stringify!(#struct_name)).into()),
                     }
                 }
             }
@@ -386,9 +524,11 @@ pub fn generate_update_fields(
             impl UpdateField for #struct_name {
                 fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
                     let field_name = &tag.name.local_part;
+                    let field_set: std::collections::HashSet<&str> = vec![#(#field_set),*].into_iter().collect();
+
                     match (tag.name.local_part.as_str(), doc) {
                         #(#arms)*
-                        _ => Err(format!("Content is missing or unknown field `{}`", tag.name.local_part.as_str()).into()),
+                        _ => Err(format!("Content is missing or unknown field `{}` in {}", tag.name.local_part.as_str(),stringify!(#struct_name)).into()),
                     }
                 }
             }
