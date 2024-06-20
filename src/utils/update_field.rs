@@ -448,7 +448,6 @@ pub struct FieldParameters<'a> {
     pub attributed_opt_fields: &'a mut FieldTypes<OptionField>,
     pub non_attributed_opt_fields: &'a mut FieldTypes<OptionField>,
     pub std_types: &'a HashSet<Ident>,
-    pub field_set: &'a mut Vec<String>,
 }
 
 pub fn generate_update_fields(
@@ -467,7 +466,7 @@ pub fn generate_update_fields(
         attributed_opt_fields,
         non_attributed_opt_fields,
         std_types,
-        field_set,
+        
     } = field_parameters;
     let gen_attributed_fields = generate_attributed_fields(attributed_fields);
     let gen_attributed_opt_fields = generate_attribute_opt_fields(attributed_opt_fields);
@@ -508,8 +507,6 @@ pub fn generate_update_fields(
         quote! {
             impl UpdateField for #struct_name {
                 fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
-                    let field_set: std::collections::HashSet<&str> = vec![#(#field_set),*].into_iter().collect();
-                    let field_name = &tag.name.local_part;
                     #(#attribute_arms)*
                     match (tag.name.local_part.as_str(), doc) {
                         #(#arms)*
@@ -523,9 +520,6 @@ pub fn generate_update_fields(
         quote! {
             impl UpdateField for #struct_name {
                 fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
-                    let field_name = &tag.name.local_part;
-                    let field_set: std::collections::HashSet<&str> = vec![#(#field_set),*].into_iter().collect();
-
                     match (tag.name.local_part.as_str(), doc) {
                         #(#arms)*
                         _ => Err(format!("Content is missing or unknown field `{}` in {}", tag.name.local_part.as_str(),stringify!(#struct_name)).into()),

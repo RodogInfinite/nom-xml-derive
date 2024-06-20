@@ -48,7 +48,6 @@ pub fn get_fields<'a>(
         attributed_opt_fields,
         non_attributed_opt_fields,
         std_types,
-        field_set,
     } = params;
     if let syn::DeriveInput {
         attrs: _,
@@ -81,9 +80,6 @@ pub fn get_fields<'a>(
             } = field
             {
                 let field_ident = ident;
-                if let Some(field_ident) = ident {
-                    field_set.push(field_ident.to_string()); 
-                }
              
                 match check_attrs(attrs) {
                     Ok(()) => extract_segments(

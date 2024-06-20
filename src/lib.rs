@@ -44,7 +44,6 @@ pub fn derive_macro(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         attributed_opt_fields,
         non_attributed_opt_fields,
         std_types,
-        field_set,
     };
     match get_fields(&mut params, &ast) {
         Ok(()) => {}
