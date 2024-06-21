@@ -8,19 +8,38 @@ use syn::{
 
 use crate::utils::update_field::is_numeric_type;
 
-use super::update_field::FieldParameters;
+use super::update_field::FieldsContextRefs;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Attributed;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct AttributedOption;
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct NonAttributed;
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct NonAttributedOptionField;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SubField;
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct SubOptionField;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct VecField;
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct VecOptionField;
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct VecSubField;
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct VecOptionSubField;
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+
+pub struct OptionVecField;
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct OptionVecSubField;
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct OptionField;
 
@@ -31,24 +50,14 @@ pub struct FieldTypes<State> {
     state: PhantomData<State>,
 }
 
-pub fn get_fields<'a>(
-    params: &mut FieldParameters<'a>,
+
+
+impl<'a> FieldsContextRefs<'a> {
+pub fn get_fields(
+    &mut self,
+    //params: &mut FieldsContextRefs<'a>,
     ast: &'a DeriveInput,
 ) -> Result<(), syn::Error> {
-    let FieldParameters {
-        struct_name: _,
-        attributed_fields,
-        non_attributed_fields,
-        sub_fields,
-        sub_opt_fields,
-        vec_fields,
-        vec_sub_fields,
-        vec_opt_fields,
-        vec_opt_sub_fields,
-        attributed_opt_fields,
-        non_attributed_opt_fields,
-        std_types,
-    } = params;
     if let syn::DeriveInput {
         attrs: _,
         vis: _,
@@ -60,59 +69,66 @@ pub fn get_fields<'a>(
                 ..
             }),
     } = &ast
-    {
-        fields.named.iter().try_for_each(|field| {
-            if let Field {
-                attrs,
-                vis: _,
-                mutability: _,
-                ident,
-                colon_token: _,
-                ty:
-                    syn::Type::Path(syn::TypePath {
-                        qself: _,
-                        path:
-                            syn::Path {
-                                leading_colon: _,
-                                segments,
-                            },
-                    }),
-            } = field
-            {
-                let field_ident = ident;
-             
-                match check_attrs(attrs) {
-                    Ok(()) => extract_segments(
-                        segments,
-                        &mut FieldContext {
-                            field_ident,
-                            field,
-                            attrs,
-                            attributed_fields,
-                            non_attributed_fields,
-                            sub_fields,
-                            sub_opt_fields,
-                            vec_fields,
-                            vec_sub_fields,
-                            vec_opt_fields,
-                            vec_opt_sub_fields,
-                            attributed_opt_fields,
-                            non_attributed_opt_fields,
-                        },
-                        std_types,
-                    ),
-                    Err(e) => Err(e),
-                }
-            } else {
-                Err(syn::Error::new(
-                    Span::call_site(),
-                    format!("Expected syn::Field, found `{field:?}`"),
-                ))
-            }
-        })?;
-    }
+        {
 
-    Ok::<(), syn::Error>(())
+            fields.named.iter().try_for_each(|field| {
+                if let Field {
+                    attrs,
+                    vis: _,
+                    mutability: _,
+                    ident,
+                    colon_token: _,
+                    ty:
+                        syn::Type::Path(syn::TypePath {
+                            qself: _,
+                            path:
+                                syn::Path {
+                                    leading_colon: _,
+                                    segments,
+                                },
+                        }),
+                } = field
+                {
+                    let field_ident = ident;
+                    self.field_ident = ident;
+                    self.field = Some(field);
+                    self.attrs = Some(attrs);
+                    match check_attrs(attrs) {
+                        Ok(()) => extract_segments(
+                            segments,
+                            self,
+                            // &mut FieldContext {
+                            //     field_ident,
+                            //     field,
+                            //     attrs,
+                            //     attributed_fields: self.attributed_fields,
+                            //     attributed_opt_fields: self.attributed_opt_fields,
+                            //     non_attributed_opt_fields: self.non_attributed_opt_fields,
+                            //     non_attributed_fields: self.non_attributed_fields,
+                            //     sub_fields: self.sub_fields,
+                            //     sub_opt_fields: self.sub_opt_fields,
+                            //     vec_fields: self.vec_fields,
+                            //     vec_sub_fields: self.vec_sub_fields,
+                            //     vec_opt_fields: self.vec_opt_fields,
+                            //     vec_opt_sub_fields: self.vec_opt_sub_fields,
+                                
+                                
+                            // },
+                            self.std_types
+                        ),
+                        Err(e) => Err(e),
+                    }
+                } else {
+                    Err(syn::Error::new(
+                        Span::call_site(),
+                        format!("Expected syn::Field, found `{field:?}`"),
+                    ))
+                }
+            })?;
+        }
+
+        Ok::<(), syn::Error>(())
+    }
 }
 
 fn check_attrs(attrs: &[Attribute]) -> Result<(), syn::Error> {
@@ -165,25 +181,10 @@ fn check_attrs(attrs: &[Attribute]) -> Result<(), syn::Error> {
    })
 }
 
-struct FieldContext<'a> {
-    field_ident: &'a Option<Ident>,
-    field: &'a Field,
-    attrs: &'a [Attribute],
-    attributed_fields: &'a mut FieldTypes<Attributed>,
-    non_attributed_fields: &'a mut FieldTypes<NonAttributed>,
-    sub_fields: &'a mut FieldTypes<SubField>,
-    sub_opt_fields: &'a mut FieldTypes<OptionField>,
-    vec_fields: &'a mut FieldTypes<VecField>,
-    vec_sub_fields: &'a mut FieldTypes<SubField>,
-    vec_opt_fields: &'a mut FieldTypes<OptionField>,
-    vec_opt_sub_fields: &'a mut FieldTypes<SubField>,
-    attributed_opt_fields: &'a mut FieldTypes<OptionField>,
-    non_attributed_opt_fields: &'a mut FieldTypes<OptionField>,
-}
 
 fn extract_segments(
     segments: &Punctuated<PathSegment, PathSep>,
-    ctx: &mut FieldContext,
+    ctx: &mut FieldsContextRefs,
     std_types: &HashSet<Ident>,
 ) -> Result<(), syn::Error> {
   
@@ -191,57 +192,66 @@ fn extract_segments(
         .iter()
         .try_for_each(|PathSegment { ident, arguments }| {
             if let Some(field_ident) = ctx.field_ident {
-                if !ctx.attrs.is_empty() {
-                    if ident == "Option" {
-                        ctx.attributed_opt_fields.fields.push(field_ident.clone());
-                        ctx.attributed_opt_fields.tys.push(field_ident.clone());
-                    }else {
-                        ctx.attributed_fields.fields.push(field_ident.clone());
-                        ctx.attributed_fields.tys.push(field_ident.clone());
-                    }
-                    Ok(())
-                } else {
-                    let ty_ident = ident;
-                   
-                    if ty_ident == "String" || is_numeric_type(ty_ident) {
-                        extract_arguments(
-                            arguments,
-                            field_ident,
-                            ty_ident,
-                            ctx.non_attributed_fields,
-                            std_types,
-                        )
-                    } else if ty_ident == "Vec" {
-                        extract_vec_field_arguments(
-                            arguments,
-                            field_ident,
-                            ty_ident,
-                            ctx,
-                            std_types,
-                        )?;
-                     
-                        Ok(())
-                    } else if ty_ident == "Option" {
+                if let Some(attrs) = ctx.attrs {
 
-                        extract_optional_arguments(
-                            arguments,
-                            field_ident,
-                            ty_ident,
-                            ctx,
-                            std_types,
-                        )
+                    
+                    if !attrs.is_empty() {
+                        if ident == "Option" {
+                            ctx.attributed_opt_fields.fields.push(field_ident.clone());
+                            ctx.attributed_opt_fields.tys.push(field_ident.clone());
+                        }else {
+                            ctx.attributed_fields.fields.push(field_ident.clone());
+                            ctx.attributed_fields.tys.push(field_ident.clone());
+                        }
+                        Ok(())
                     } else {
+                        let ty_ident = ident;
+                    
+                        if ty_ident == "String" || is_numeric_type(ty_ident) {
+                            extract_arguments(
+                                arguments,
+                                field_ident,
+                                ty_ident,
+                                ctx.non_attributed_fields,
+                                std_types,
+                            )
+                        } else if ty_ident == "Vec" {
+                            extract_vec_field_arguments(
+                                arguments,
+                                field_ident,
+                                ty_ident,
+                                ctx,
+                                std_types,
+                            )?;
+                        
+                            Ok(())
+                        } else if ty_ident == "Option" {
 
-                        extract_arguments(
-                            arguments,
-                            field_ident,
-                            ty_ident,
-                            ctx.sub_fields,
-                            std_types,
-                        )?;
-                       
-                        Ok(())
+                            extract_optional_arguments(
+                                arguments,
+                                field_ident,
+                                ty_ident,
+                                ctx,
+                                std_types,
+                            )
+                        } else {
+
+                            extract_arguments(
+                                arguments,
+                                field_ident,
+                                ty_ident,
+                                ctx.sub_fields,
+                                std_types,
+                            )?;
+                        
+                            Ok(())
+                        }
                     }
+                } else {
+                    Err(syn::Error::new(
+                        Span::call_site(),
+                        format!("Missing syn::Attribute, found `{:?}`", ctx.field),
+                    ))
                 }
             } else {
                 Err(syn::Error::new(
@@ -312,7 +322,7 @@ fn extract_optional_arguments(
     arguments: &PathArguments,
     field_ident: &Ident,
     ty_ident: &Ident,
-    ctx: &mut FieldContext,
+    ctx: &mut FieldsContextRefs,
     std_types: &HashSet<Ident>,
 ) -> Result<(), syn::Error> {
     match arguments {
@@ -355,6 +365,10 @@ fn extract_optional_arguments(
                         if !arguments.is_empty() {
                            
                             if ident == "Vec" {
+                                dbg!("HERE");
+                            dbg!(&arguments);
+                            dbg!(&field_ident);
+                            dbg!(&ty_ident);
                                 extract_optional_sub_field_arguments(
                                     arguments,
                                     field_ident,
@@ -376,6 +390,7 @@ fn extract_optional_arguments(
                             ctx.non_attributed_opt_fields.tys.push(ident.clone());
                             Ok(())
                         } else {
+                            
                             extract_arguments(
                                 arguments,
                                 field_ident,
@@ -400,7 +415,7 @@ fn extract_optional_sub_field_arguments(
     arguments: &PathArguments,
     field_ident: &Ident,
     ty_ident: &Ident,
-    ctx: &mut FieldContext,
+    ctx: &mut FieldsContextRefs,
     std_types: &HashSet<Ident>,
 ) -> Result<(), syn::Error> {
 
@@ -462,7 +477,7 @@ fn extract_vec_field_arguments(
     arguments: &PathArguments,
     field_ident: &Ident,
     ty_ident: &Ident,
-    ctx: &mut FieldContext,
+    ctx: &mut FieldsContextRefs,
     std_types: &HashSet<Ident>,
 ) -> Result<(), syn::Error> {
 
