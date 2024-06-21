@@ -5,7 +5,9 @@ use quote::quote;
 use syn::Ident;
 
 use super::fields_extraction::{
-    Attributed, AttributedOption, FieldTypes, NonAttributed, NonAttributedOptionField, OptionField, OptionVecSubField, SubField, SubOptionField, VecField, VecOptionField, VecOptionSubField, VecSubField
+    Attributed, AttributedOption, FieldTypes, NonAttributed, NonAttributedOptionField,
+    OptionVecSubField, SubField, SubOptionField, VecField, VecOptionField, VecOptionSubField,
+    VecSubField,
 };
 
 pub fn is_numeric_type(ty: &Ident) -> bool {
@@ -85,7 +87,7 @@ impl GenerateFields for FieldTypes<AttributedOption> {
                     }
                 })
                 .collect();
-    
+
             Ok(Some(quote! {
                 if let Some(attributes) = &tag.attributes {
                     attributes.iter().try_for_each(|attr| -> Result<()> {
@@ -123,7 +125,7 @@ impl GenerateFields for FieldTypes<SubField> {
                     }
                 })
                 .collect();
-    
+
             Ok(Some(quote! {
                 (_, Document::Nested(_)) => {
                     doc.iter_with_depth(1)
@@ -163,7 +165,7 @@ impl GenerateFields for FieldTypes<SubOptionField> {
                     }
                 })
                 .collect();
-    
+
             Ok(Some(quote! {
                 (_, Document::Nested(_)) => {
                     doc.iter_with_depth(1)
@@ -188,9 +190,7 @@ impl GenerateFields for FieldTypes<SubOptionField> {
 }
 
 impl GenerateFields for FieldTypes<NonAttributed> {
-    fn generate_fields(
-        &self,
-    ) -> Result<Option<TokenStream>, syn::Error> {
+    fn generate_fields(&self) -> Result<Option<TokenStream>, syn::Error> {
         if self.fields.is_empty() {
             Ok(None)
         } else {
@@ -198,35 +198,33 @@ impl GenerateFields for FieldTypes<NonAttributed> {
                 .fields
                 .iter()
                 .zip(self.tys.iter())
-                .map(|(field_name, field_type)| {
-                    
-                        match field_type.to_string().as_str() {
-                            "String" => Ok(quote! {
-                                (stringify!(#field_name), Document::Content(Some(value))) => {
-                                    self.#field_name = value.to_string();
-                                    Ok(())
-                                }
-                            }),
-                            _ => {
-                                if is_numeric_type(field_type) {
-                                    Ok(quote! {
-                                        (stringify!(#field_name), Document::Content(Some(value))) => {
-                                            self.#field_name = value.parse::<#field_type>()?;
-                                            Ok(())
-                                        }
-                                    })
-                                } else {
-                                    Err(syn::Error::new(
-                                        Span::call_site(),
-                                        format!("Unknown Field: `{field_name:?}`"),
-                                    ))
-                                }
+                .map(
+                    |(field_name, field_type)| match field_type.to_string().as_str() {
+                        "String" => Ok(quote! {
+                            (stringify!(#field_name), Document::Content(Some(value))) => {
+                                self.#field_name = value.to_string();
+                                Ok(())
+                            }
+                        }),
+                        _ => {
+                            if is_numeric_type(field_type) {
+                                Ok(quote! {
+                                    (stringify!(#field_name), Document::Content(Some(value))) => {
+                                        self.#field_name = value.parse::<#field_type>()?;
+                                        Ok(())
+                                    }
+                                })
+                            } else {
+                                Err(syn::Error::new(
+                                    Span::call_site(),
+                                    format!("Unknown Field: `{field_name:?}`"),
+                                ))
                             }
                         }
-                    }
+                    },
                 )
                 .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
-    
+
             if fields.is_empty() {
                 Ok(None)
             } else {
@@ -236,7 +234,6 @@ impl GenerateFields for FieldTypes<NonAttributed> {
             }
         }
     }
-    
 }
 fn generate_non_attributed_fields(
     non_attributed_fields: &FieldTypes<NonAttributed>,
@@ -290,9 +287,7 @@ fn generate_non_attributed_fields(
 }
 
 impl GenerateFields for FieldTypes<NonAttributedOptionField> {
-    fn generate_fields(
-        &self,
-    ) -> Result<Option<TokenStream>, syn::Error> {
+    fn generate_fields(&self) -> Result<Option<TokenStream>, syn::Error> {
         if self.fields.is_empty() {
             Ok(None)
         } else {
@@ -339,10 +334,10 @@ impl GenerateFields for FieldTypes<NonAttributedOptionField> {
 }
 
 impl GenerateFields for FieldTypes<VecField> {
-    fn generate_fields(&self) -> Result<Option<TokenStream>, syn::Error>  {
+    fn generate_fields(&self) -> Result<Option<TokenStream>, syn::Error> {
         let vec_field_names = self.fields.clone();
         let vec_field_types = self.tys.clone();
-    
+
         if vec_field_names.is_empty() {
             Ok(None)
         } else {
@@ -373,7 +368,6 @@ impl GenerateFields for FieldTypes<VecField> {
     }
 }
 
-
 impl GenerateFields for FieldTypes<VecSubField> {
     fn generate_fields(&self) -> Result<Option<TokenStream>, syn::Error> {
         if self.fields.is_empty() {
@@ -389,8 +383,8 @@ impl GenerateFields for FieldTypes<VecSubField> {
                             elements
                             .iter()
                             .try_for_each(|element| -> Result<()> {
-                                let mut nested_field = #field_type::default(); 
-                                if let Document::Element(tag, content, _) = element { 
+                                let mut nested_field = #field_type::default();
+                                if let Document::Element(tag, content, _) = element {
                                         if let Document::Nested(inner_elements) = content.as_ref() {
                                             inner_elements.iter().try_for_each(
                                                 |inner_element| -> Result<()> {
@@ -403,9 +397,9 @@ impl GenerateFields for FieldTypes<VecSubField> {
                                                 nested_field.update_field(tag,content)
                                             })?;
                                         }
-                                    } 
-                                    
-                                self.#field_name.push(nested_field.clone()); 
+                                    }
+
+                                self.#field_name.push(nested_field.clone());
                                 Ok(())
                             })?;
                             Ok(())
@@ -413,7 +407,7 @@ impl GenerateFields for FieldTypes<VecSubField> {
                     }
                 })
                 .collect();
-    
+
             Ok(Some(quote! {
                 #(#gen_sub_opt_fields,)*
             }))
@@ -421,12 +415,11 @@ impl GenerateFields for FieldTypes<VecSubField> {
     }
 }
 
-
 impl GenerateFields for FieldTypes<VecOptionField> {
     fn generate_fields(&self) -> Result<Option<TokenStream>, syn::Error> {
         let vec_field_names = self.fields.clone();
         let vec_field_types = self.tys.clone();
-    
+
         if vec_field_names.is_empty() {
             Ok(None)
         } else {
@@ -471,33 +464,35 @@ impl GenerateFields for FieldTypes<VecOptionSubField> {
                 .map(|(field_name, field_type)| {
                     quote! {
                         (stringify!(#field_name), Document::Nested(elements)) => {
-                            let vec_field = self.#field_name.get_or_insert_with(Vec::new);
-                            elements.iter().try_for_each(|element| -> Result<()> {
-                                if let Document::Element(_, ref inner_doc, _) = element {
-                                    let mut nested_field = #field_type::default(); //TODO: Check this
-                                    if let Document::Nested(inner_elements) = inner_doc.as_ref() { 
+                            elements
+                            .iter()
+                            .try_for_each(|element| -> Result<()> {
+                                let mut nested_field = #field_type::default();
+                                if let Document::Element(tag, content, _) = element {
+                                    if let Document::Nested(inner_elements) = content.as_ref() {
                                         inner_elements.iter().try_for_each(
                                             |inner_element| -> Result<()> {
-                                                if let Document::Element(tag, content, _) = inner_element { 
-                                                    nested_field.update_field(tag, content)?; 
+                                                if let Document::Element(inner_tag, inner_content, _) = inner_element {
+                                                    nested_field.update_field(inner_tag, inner_content)?;
                                                 }
                                                 Ok(())
                                             },
-                                        )?;
-                                        vec_field.push(nested_field); 
+                                        ).or_else(|_| {
+                                            nested_field.update_field(tag, content)
+                                        })?;
+                                        self.#field_name.push(Some(nested_field.clone()));
                                     } else {
-                                        return Err("Content is missing in Author authors".into()); 
+                                        self.#field_name.push(None);
                                     }
                                 }
                                 Ok(())
-                            },
-                        )?;
-                        Ok(())
-                    }
+                            })?;
+                            Ok(())
+                        }
                     }
                 })
                 .collect();
-    
+
             Ok(Some(quote! {
                 #(#gen_sub_opt_fields,)*
             }))
@@ -505,7 +500,53 @@ impl GenerateFields for FieldTypes<VecOptionSubField> {
     }
 }
 
+impl GenerateFields for FieldTypes<OptionVecSubField> {
+    fn generate_fields(&self) -> Result<Option<TokenStream>, syn::Error> {
+        if self.fields.is_empty() {
+            Ok(None)
+        } else {
+            let gen_sub_opt_fields: Vec<TokenStream> = self
+                .fields
+                .iter()
+                .zip(self.tys.iter())
+                .map(|(field_name, field_type)| {
+                    quote! {
+                        (stringify!(#field_name), Document::Nested(elements)) => {
+                            elements
+                            .iter()
+                            .try_for_each(|element| -> Result<()> {
+                                let mut nested_field = #field_type::default();
+                                if let Document::Element(tag, content, _) = element {
+                                    if let Document::Nested(inner_elements) = content.as_ref() {
+                                        inner_elements.iter().try_for_each(
+                                            |inner_element| -> Result<()> {
+                                                if let Document::Element(inner_tag, inner_content, _) = inner_element {
+                                                    nested_field.update_field(inner_tag, inner_content)?;
+                                                }
+                                                Ok(())
+                                            },
+                                        ).or_else(|_| {
+                                            nested_field.update_field(tag, content)
+                                        })?;
+                                        self.#field_name.get_or_insert_with(Vec::new).push(nested_field);
+                                    } else {
+                                        self.#field_name = None;
+                                    }
+                                }
+                                Ok(())
+                            })?;
+                            Ok(())
+                        }
+                    }
+                })
+                .collect();
 
+            Ok(Some(quote! {
+                #(#gen_sub_opt_fields,)*
+            }))
+        }
+    }
+}
 
 pub struct FieldsContext<'a> {
     pub struct_name: &'a Ident,
@@ -520,13 +561,11 @@ pub struct FieldsContext<'a> {
     pub vec_opt_fields: FieldTypes<VecOptionField>,
     pub vec_opt_sub_fields: FieldTypes<VecOptionSubField>,
     pub opt_vec_sub_fields: FieldTypes<OptionVecSubField>,
-    
-    
+
     pub std_types: &'a HashSet<Ident>,
 }
 
 impl<'a> FieldsContext<'a> {
- 
     pub fn new(struct_name: &'a Ident, std_types: &'a HashSet<Ident>) -> Self {
         Self {
             struct_name,
@@ -541,12 +580,11 @@ impl<'a> FieldsContext<'a> {
             opt_vec_sub_fields: FieldTypes::<OptionVecSubField>::default(),
             vec_opt_fields: FieldTypes::<VecOptionField>::default(),
             vec_opt_sub_fields: FieldTypes::<VecOptionSubField>::default(),
-            
-            
+
             std_types,
         }
     }
-    
+
     pub fn as_mut_refs(&mut self) -> FieldsContextRefs {
         FieldsContextRefs {
             struct_name: self.struct_name,
@@ -561,17 +599,13 @@ impl<'a> FieldsContext<'a> {
             opt_vec_sub_fields: &mut self.opt_vec_sub_fields,
             vec_opt_fields: &mut self.vec_opt_fields,
             vec_opt_sub_fields: &mut self.vec_opt_sub_fields,
-            
+
             std_types: self.std_types,
             field_ident: &None,
             field: None,
             attrs: None,
-
         }
     }
-
-    
-    
 }
 pub struct FieldsContextRefs<'a> {
     pub struct_name: &'a Ident,
@@ -586,27 +620,22 @@ pub struct FieldsContextRefs<'a> {
     pub vec_opt_fields: &'a mut FieldTypes<VecOptionField>,
     pub vec_opt_sub_fields: &'a mut FieldTypes<VecOptionSubField>,
     pub opt_vec_sub_fields: &'a mut FieldTypes<OptionVecSubField>,
-    
-    
+
     pub std_types: &'a HashSet<Ident>,
     pub field_ident: &'a Option<Ident>,
-    pub field:  Option<&'a syn::Field>,
+    pub field: Option<&'a syn::Field>,
     pub attrs: Option<&'a [syn::Attribute]>,
 }
 
 impl<'a> FieldsContextRefs<'a> {
-    
-    pub fn generate_update_fields(
-        &'a mut self,
-    ) -> Result<TokenStream, syn::Error> {
+    pub fn generate_update_fields(&'a mut self) -> Result<TokenStream, syn::Error> {
         let struct_name = self.struct_name;
         let gen_attributed_fields = self.attributed_fields.generate_fields()?;
         let gen_attributed_opt_fields = self.attributed_opt_fields.generate_fields()?;
 
         let gen_non_attributed_fields =
             generate_non_attributed_fields(self.non_attributed_fields, self.std_types)?;
-        let gen_non_attributed_opt_fields = 
-        self.non_attributed_opt_fields.generate_fields()?;
+        let gen_non_attributed_opt_fields = self.non_attributed_opt_fields.generate_fields()?;
 
         let gen_sub_fields = self.sub_fields.generate_fields()?;
         let gen_sub_opt_fields = self.sub_opt_fields.generate_fields()?;
@@ -615,6 +644,7 @@ impl<'a> FieldsContextRefs<'a> {
         let gen_vec_sub_fields = self.vec_sub_fields.generate_fields()?;
         let gen_vec_opt_fields = self.vec_opt_fields.generate_fields()?;
         let gen_vec_opt_sub_fields = self.vec_opt_sub_fields.generate_fields()?;
+        let gen_opt_vec_sub_fields = self.opt_vec_sub_fields.generate_fields()?;
 
         let arms: Vec<TokenStream> = vec![
             gen_non_attributed_fields,
@@ -623,6 +653,7 @@ impl<'a> FieldsContextRefs<'a> {
             gen_vec_sub_fields,
             gen_vec_opt_fields,
             gen_vec_opt_sub_fields,
+            gen_opt_vec_sub_fields,
             gen_sub_fields,
             gen_sub_opt_fields,
         ]
@@ -630,10 +661,11 @@ impl<'a> FieldsContextRefs<'a> {
         .flatten()
         .collect();
 
-        let attribute_arms: Vec<TokenStream> = vec![gen_attributed_fields, gen_attributed_opt_fields]
-            .into_iter()
-            .flatten()
-            .collect();
+        let attribute_arms: Vec<TokenStream> =
+            vec![gen_attributed_fields, gen_attributed_opt_fields]
+                .into_iter()
+                .flatten()
+                .collect();
 
         let gen_impl = if !attribute_arms.is_empty() {
             quote! {

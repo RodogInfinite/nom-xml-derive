@@ -3,7 +3,9 @@ use std::{collections::HashSet, marker::PhantomData};
 use proc_macro2::{Span, TokenTree};
 
 use syn::{
-    punctuated::Punctuated, token::PathSep, AngleBracketedGenericArguments, AttrStyle, Attribute, DeriveInput, Field, Fields, GenericArgument, Ident, MacroDelimiter, Meta, MetaList, Path, PathArguments, PathSegment
+    punctuated::Punctuated, token::PathSep, AngleBracketedGenericArguments, AttrStyle, Attribute,
+    DeriveInput, Field, Fields, GenericArgument, Ident, MacroDelimiter, Meta, MetaList, Path,
+    PathArguments, PathSegment,
 };
 
 use crate::utils::update_field::is_numeric_type;
@@ -50,27 +52,20 @@ pub struct FieldTypes<State> {
     state: PhantomData<State>,
 }
 
-
-
 impl<'a> FieldsContextRefs<'a> {
-pub fn get_fields(
-    &mut self,
-    //params: &mut FieldsContextRefs<'a>,
-    ast: &'a DeriveInput,
-) -> Result<(), syn::Error> {
-    if let syn::DeriveInput {
-        attrs: _,
-        vis: _,
-        ident: _,
-        generics: _,
-        data:
-            syn::Data::Struct(syn::DataStruct {
-                fields: Fields::Named(fields),
-                ..
-            }),
-    } = &ast
+    pub fn get_fields(&mut self, ast: &'a DeriveInput) -> Result<(), syn::Error> {
+        if let syn::DeriveInput {
+            attrs: _,
+            vis: _,
+            ident: _,
+            generics: _,
+            data:
+                syn::Data::Struct(syn::DataStruct {
+                    fields: Fields::Named(fields),
+                    ..
+                }),
+        } = &ast
         {
-
             fields.named.iter().try_for_each(|field| {
                 if let Field {
                     attrs,
@@ -89,33 +84,11 @@ pub fn get_fields(
                         }),
                 } = field
                 {
-                    let field_ident = ident;
                     self.field_ident = ident;
                     self.field = Some(field);
                     self.attrs = Some(attrs);
                     match check_attrs(attrs) {
-                        Ok(()) => extract_segments(
-                            segments,
-                            self,
-                            // &mut FieldContext {
-                            //     field_ident,
-                            //     field,
-                            //     attrs,
-                            //     attributed_fields: self.attributed_fields,
-                            //     attributed_opt_fields: self.attributed_opt_fields,
-                            //     non_attributed_opt_fields: self.non_attributed_opt_fields,
-                            //     non_attributed_fields: self.non_attributed_fields,
-                            //     sub_fields: self.sub_fields,
-                            //     sub_opt_fields: self.sub_opt_fields,
-                            //     vec_fields: self.vec_fields,
-                            //     vec_sub_fields: self.vec_sub_fields,
-                            //     vec_opt_fields: self.vec_opt_fields,
-                            //     vec_opt_sub_fields: self.vec_opt_sub_fields,
-                                
-                                
-                            // },
-                            self.std_types
-                        ),
+                        Ok(()) => extract_segments(segments, self, self.std_types),
                         Err(e) => Err(e),
                     }
                 } else {
@@ -144,7 +117,7 @@ fn check_attrs(attrs: &[Attribute]) -> Result<(), syn::Error> {
             }),
         } = &attr
         {
-            
+
             segments.iter().try_for_each(|PathSegment { ident, arguments: _ }| {
                 if ident != "extract" {
                     Err(syn::Error::new(
@@ -181,32 +154,28 @@ fn check_attrs(attrs: &[Attribute]) -> Result<(), syn::Error> {
    })
 }
 
-
 fn extract_segments(
     segments: &Punctuated<PathSegment, PathSep>,
     ctx: &mut FieldsContextRefs,
     std_types: &HashSet<Ident>,
 ) -> Result<(), syn::Error> {
-  
     segments
         .iter()
         .try_for_each(|PathSegment { ident, arguments }| {
             if let Some(field_ident) = ctx.field_ident {
                 if let Some(attrs) = ctx.attrs {
-
-                    
                     if !attrs.is_empty() {
                         if ident == "Option" {
                             ctx.attributed_opt_fields.fields.push(field_ident.clone());
                             ctx.attributed_opt_fields.tys.push(field_ident.clone());
-                        }else {
+                        } else {
                             ctx.attributed_fields.fields.push(field_ident.clone());
                             ctx.attributed_fields.tys.push(field_ident.clone());
                         }
                         Ok(())
                     } else {
                         let ty_ident = ident;
-                    
+
                         if ty_ident == "String" || is_numeric_type(ty_ident) {
                             extract_arguments(
                                 arguments,
@@ -222,11 +191,8 @@ fn extract_segments(
                                 ty_ident,
                                 ctx,
                                 std_types,
-                            )?;
-                        
-                            Ok(())
+                            )
                         } else if ty_ident == "Option" {
-
                             extract_optional_arguments(
                                 arguments,
                                 field_ident,
@@ -235,16 +201,13 @@ fn extract_segments(
                                 std_types,
                             )
                         } else {
-
                             extract_arguments(
                                 arguments,
                                 field_ident,
                                 ty_ident,
                                 ctx.sub_fields,
                                 std_types,
-                            )?;
-                        
-                            Ok(())
+                            )
                         }
                     }
                 } else {
@@ -294,9 +257,12 @@ fn extract_arguments<State>(
                     .iter()
                     .try_for_each(|PathSegment { ident, arguments }| {
                         if !arguments.is_empty() {
-                            todo!("Nested segment arguments has yet to be implemented");
+                            todo!("Nested segment arguments have yet to be implemented");
                         }
-                        if std_types.contains(ident) || std_types.contains(ty_ident) || is_numeric_type(ident){
+                        if std_types.contains(ident)
+                            || std_types.contains(ty_ident)
+                            || is_numeric_type(ident)
+                        {
                             fields.fields.push(field_ident.clone());
                             fields.tys.push(ident.clone());
                             Ok(())
@@ -327,13 +293,13 @@ fn extract_optional_arguments(
 ) -> Result<(), syn::Error> {
     match arguments {
         PathArguments::None => {
-
-            if  std_types.contains(ty_ident) || is_numeric_type(field_ident){
-                ctx.non_attributed_opt_fields.fields.push(field_ident.clone());
+            if std_types.contains(ty_ident) || is_numeric_type(field_ident) {
+                ctx.non_attributed_opt_fields
+                    .fields
+                    .push(field_ident.clone());
                 ctx.non_attributed_opt_fields.tys.push(field_ident.clone());
                 Ok(())
             } else {
-               
                 extract_arguments(
                     arguments,
                     field_ident,
@@ -342,7 +308,6 @@ fn extract_optional_arguments(
                     std_types,
                 )
             }
-
         }
         PathArguments::AngleBracketed(AngleBracketedGenericArguments {
             colon2_token: _,
@@ -358,25 +323,20 @@ fn extract_optional_arguments(
                         segments,
                     },
             })) = arg
-            { 
+            {
                 segments
                     .iter()
                     .try_for_each(|PathSegment { ident, arguments }| {
                         if !arguments.is_empty() {
-                           
                             if ident == "Vec" {
-                                dbg!("HERE");
-                            dbg!(&arguments);
-                            dbg!(&field_ident);
-                            dbg!(&ty_ident);
-                                extract_optional_sub_field_arguments(
+                                extract_optional_vec_field_arguments(
                                     arguments,
                                     field_ident,
                                     ty_ident,
                                     ctx,
                                     std_types,
                                 )?;
-                                
+
                                 Ok(())
                             } else {
                                 Err(syn::Error::new(
@@ -384,13 +344,13 @@ fn extract_optional_arguments(
                                     format!("Unknown Nested Segment: `{ident:?}` `{arguments:?}`"),
                                 ))
                             }
-                        }
-                        else if std_types.contains(ident)  || is_numeric_type(ident){
-                            ctx.non_attributed_opt_fields.fields.push(field_ident.clone());
+                        } else if std_types.contains(ident) || is_numeric_type(ident) {
+                            ctx.non_attributed_opt_fields
+                                .fields
+                                .push(field_ident.clone());
                             ctx.non_attributed_opt_fields.tys.push(ident.clone());
                             Ok(())
                         } else {
-                            
                             extract_arguments(
                                 arguments,
                                 field_ident,
@@ -411,14 +371,13 @@ fn extract_optional_arguments(
     }
 }
 
-fn extract_optional_sub_field_arguments(
+fn extract_sub_optional_field_arguments(
     arguments: &PathArguments,
     field_ident: &Ident,
-    ty_ident: &Ident,
+    _ty_ident: &Ident,
     ctx: &mut FieldsContextRefs,
     std_types: &HashSet<Ident>,
 ) -> Result<(), syn::Error> {
-
     match arguments {
         PathArguments::None => {
             Err(syn::Error::new(
@@ -440,17 +399,22 @@ fn extract_optional_sub_field_arguments(
                         segments,
                     },
             })) = arg
-            { 
+            {
                 segments.iter().try_for_each(|PathSegment { ident, arguments }| {
-                    if !arguments.is_empty() {unimplemented!("Nested segment arguments has yet to be implemented for extract_optional_sub_field_arguments");}
+                    if !arguments.is_empty() {
+                        Err(syn::Error::new(
+                            Span::call_site(),
+                            format!("nested arguments not yet supported in extract_optional_sub_field_arguments `{arguments:?}`"),
+                        ))
+                    }
                     else if std_types.contains(ident) || is_numeric_type(ident) {
-                            extract_arguments(
-                                arguments,
-                                field_ident,
-                                ident,
-                                ctx.vec_opt_fields,
-                                std_types,
-                            )
+                        extract_arguments(
+                            arguments,
+                            field_ident,
+                            ident,
+                            ctx.vec_opt_fields,
+                            std_types,
+                        )
                         } else {
                             extract_arguments(
                                 arguments,
@@ -460,10 +424,9 @@ fn extract_optional_sub_field_arguments(
                                 std_types,
                             )
                         }
-                    } 
-                )
-            } else {
-            
+                }
+            )} else {
+
                 Ok(())
             }
         }),
@@ -480,7 +443,6 @@ fn extract_vec_field_arguments(
     ctx: &mut FieldsContextRefs,
     std_types: &HashSet<Ident>,
 ) -> Result<(), syn::Error> {
-
     match arguments {
         PathArguments::None => {
             Err(syn::Error::new(
@@ -502,9 +464,46 @@ fn extract_vec_field_arguments(
                         segments,
                     },
             })) = arg
-            { 
+            {
                 segments.iter().try_for_each(|PathSegment { ident, arguments }| {
-                    if !arguments.is_empty() {unimplemented!("Nested segment arguments has yet to be implemented for extract_optional_sub_field_arguments");}
+                    if !arguments.is_empty() {
+                        match ident.to_string().as_str() {
+                            "Option" => {
+                                extract_sub_optional_field_arguments(
+                                    arguments,
+                                    field_ident,
+                                    ty_ident,
+                                    ctx,
+                                    std_types,
+                                )
+                            }
+                            "String"  => {
+                                extract_arguments(
+                                    arguments,
+                                    field_ident,
+                                    ident,
+                                    ctx.vec_fields,
+                                    std_types,
+                                )
+                            }
+                            _ => {
+                                if is_numeric_type(ident) {
+
+                                    extract_arguments(
+                                        arguments,
+                                        field_ident,
+                                        ident,
+                                        ctx.vec_fields,
+                                        std_types,
+                                    )
+                                } else {
+                                    Err(syn::Error::new(
+                                    Span::call_site(),
+                                    format!("Unknown Nested Segment: `{ident:?}` `{arguments:?}`")))
+                                }
+                            }
+                        }
+                    }
                     else if std_types.contains(ident) || is_numeric_type(ident) {
                             extract_arguments(
                                 arguments,
@@ -522,10 +521,96 @@ fn extract_vec_field_arguments(
                                 std_types,
                             )
                         }
-                    } 
+                    }
                 )
             } else {
-            
+
+                Ok(())
+            }
+        }),
+        PathArguments::Parenthesized(_) => Err(syn::Error::new(
+            Span::call_site(),
+            format!("Parenthesized arguments not yet supported in extract_optional_sub_field_arguments `{arguments:?}`"),
+        )),
+    }
+}
+
+fn extract_optional_vec_field_arguments(
+    arguments: &PathArguments,
+    field_ident: &Ident,
+    _ty_ident: &Ident,
+    ctx: &mut FieldsContextRefs,
+    std_types: &HashSet<Ident>,
+) -> Result<(), syn::Error> {
+    match arguments {
+        PathArguments::None => {
+            Err(syn::Error::new(
+                Span::call_site(),
+                format!("PathArguments::None not yet supported in extract_optional_sub_field_arguments `{arguments:?}`"),
+            ))
+        }
+        PathArguments::AngleBracketed(AngleBracketedGenericArguments {
+            colon2_token: _,
+            lt_token: _,
+            args,
+            gt_token: _,
+        }) => args.iter().try_for_each(|arg| {
+            if let GenericArgument::Type(syn::Type::Path(syn::TypePath {
+                qself: _,
+                path:
+                    syn::Path {
+                        leading_colon: _,
+                        segments,
+                    },
+            })) = arg
+            {
+                segments.iter().try_for_each(|PathSegment { ident, arguments }| {
+                    if !arguments.is_empty() {
+                        match ident.to_string().as_str() {
+                            "String"  => {
+                                extract_arguments(
+                                    arguments,
+                                    field_ident,
+                                    ident,
+                                    ctx.opt_vec_sub_fields,
+                                    std_types,
+                                )
+                            }
+                            _ => {
+                                if is_numeric_type(ident) {
+
+                                    extract_arguments(
+                                        arguments,
+                                        field_ident,
+                                        ident,
+                                        ctx.opt_vec_sub_fields,
+                                        std_types,
+                                    )
+                                } else {
+                                    Err(syn::Error::new(
+                                    Span::call_site(),
+                                    format!("Unknown Nested Segment: `{ident:?}` `{arguments:?}`")))
+                                }
+                            }
+                        }
+                    }
+                    else if std_types.contains(ident) || is_numeric_type(ident) {
+                        Err(syn::Error::new(
+                            Span::call_site(),
+                            format!("opt_vec_fields not implemented yet: `{ident:?}` `{arguments:?}`")))
+                        } else {
+                            extract_arguments(
+                                arguments,
+                                field_ident,
+                                ident,
+                                ctx.opt_vec_sub_fields,
+                                std_types,
+                            )
+                        }
+                    }
+                )
+            } else {
+
                 Ok(())
             }
         }),
