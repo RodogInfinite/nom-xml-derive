@@ -51,7 +51,7 @@ impl GenerateFields for FieldTypes<Attributed> {
 
             Ok(Some(quote! {
                 if let Some(attributes) = &tag.attributes {
-                    attributes.iter().try_for_each(|attr| -> Result<()> {
+                    attributes.iter().try_for_each(|attr| -> Result<(),Box<dyn std::error::Error>> {
                         if let Attribute::Instance {
                             name,
                             value: AttributeValue::Value(attr_val),
@@ -90,7 +90,7 @@ impl GenerateFields for FieldTypes<AttributedOption> {
 
             Ok(Some(quote! {
                 if let Some(attributes) = &tag.attributes {
-                    attributes.iter().try_for_each(|attr| -> Result<()> {
+                    attributes.iter().try_for_each(|attr| -> Result<(),Box<dyn std::error::Error>> {
                         if let Attribute::Instance {
                             name,
                             value: AttributeValue::Value(attr_val),
@@ -129,7 +129,7 @@ impl GenerateFields for FieldTypes<SubField> {
             Ok(Some(quote! {
                 (_, Document::Nested(_)) => {
                     doc.iter_with_depth(1)
-                        .try_for_each(|element| -> Result<()> {
+                        .try_for_each(|element| -> Result<(),Box<dyn std::error::Error>> {
                             if let Document::Element(tag, inner_doc, _) = element {
                                 match tag.name.local_part.as_str() {
                                     #(#gen_sub_fields,)*
@@ -169,7 +169,7 @@ impl GenerateFields for FieldTypes<SubOptionField> {
             Ok(Some(quote! {
                 (_, Document::Nested(_)) => {
                     doc.iter_with_depth(1)
-                        .try_for_each(|element| -> Result<()> {
+                        .try_for_each(|element| -> Result<(),Box<dyn std::error::Error>> {
                             if let Document::Element(tag, inner_doc, _) = element {
                                 match tag.name.local_part.as_str() {
                                     #(#gen_sub_opt_fields,)*
@@ -343,11 +343,11 @@ impl GenerateFields for FieldTypes<VecField> {
         } else {
             Ok(Some(quote! {
                 #((stringify!(#vec_field_names), Document::Nested(elements)) => {
-                    elements.iter().try_for_each(|element| -> Result<()> {
+                    elements.iter().try_for_each(|element| -> Result<(),Box<dyn std::error::Error>> {
                         if let Document::Element(_, doc, _) = element {
                             let mut nested_field = #vec_field_types::default();
                             if let Document::Nested(inner_elements) = doc.as_ref() {
-                                inner_elements.iter().try_for_each(|inner_element| -> Result<()> {
+                                inner_elements.iter().try_for_each(|inner_element| -> Result<(),Box<dyn std::error::Error>> {
                                     if let Document::Element(tag, content, _) = inner_element {
                                         nested_field.update_field(tag, content)?;
                                     }
@@ -382,12 +382,12 @@ impl GenerateFields for FieldTypes<VecSubField> {
                         (stringify!(#field_name), Document::Nested(elements)) => {
                             elements
                             .iter()
-                            .try_for_each(|element| -> Result<()> {
+                            .try_for_each(|element| -> Result<(),Box<dyn std::error::Error>> {
                                 let mut nested_field = #field_type::default();
                                 if let Document::Element(tag, content, _) = element {
                                         if let Document::Nested(inner_elements) = content.as_ref() {
                                             inner_elements.iter().try_for_each(
-                                                |inner_element| -> Result<()> {
+                                                |inner_element| -> Result<(),Box<dyn std::error::Error>> {
                                                     if let Document::Element(inner_tag, inner_content, _) = inner_element {
                                                         nested_field.update_field(inner_tag, inner_content)?;
                                                     }
@@ -425,11 +425,11 @@ impl GenerateFields for FieldTypes<VecOptionField> {
         } else {
             Ok(Some(quote! {
                 #((stringify!(#vec_field_names), Document::Nested(elements)) => {
-                    elements.iter().try_for_each(|element| -> Result<()> {
+                    elements.iter().try_for_each(|element| -> Result<(),Box<dyn std::error::Error>> {
                         if let Document::Element(_, doc, _) = element {
                             let mut nested_field = #vec_field_types::default();
                             if let Document::Nested(inner_elements) = doc.as_ref() {
-                                inner_elements.iter().try_for_each(|inner_element| -> Result<()> {
+                                inner_elements.iter().try_for_each(|inner_element| -> Result<(),Box<dyn std::error::Error>> {
                                     if let Document::Element(tag, content, _) = inner_element {
                                         nested_field.update_field(tag, content)?;
                                     }
@@ -466,12 +466,12 @@ impl GenerateFields for FieldTypes<VecOptionSubField> {
                         (stringify!(#field_name), Document::Nested(elements)) => {
                             elements
                             .iter()
-                            .try_for_each(|element| -> Result<()> {
+                            .try_for_each(|element| -> Result<(),Box<dyn std::error::Error>> {
                                 let mut nested_field = #field_type::default();
                                 if let Document::Element(tag, content, _) = element {
                                     if let Document::Nested(inner_elements) = content.as_ref() {
                                         inner_elements.iter().try_for_each(
-                                            |inner_element| -> Result<()> {
+                                            |inner_element| -> Result<(),Box<dyn std::error::Error>> {
                                                 if let Document::Element(inner_tag, inner_content, _) = inner_element {
                                                     nested_field.update_field(inner_tag, inner_content)?;
                                                 }
@@ -514,12 +514,12 @@ impl GenerateFields for FieldTypes<OptionVecSubField> {
                         (stringify!(#field_name), Document::Nested(elements)) => {
                             elements
                             .iter()
-                            .try_for_each(|element| -> Result<()> {
+                            .try_for_each(|element| -> Result<(),Box<dyn std::error::Error>> {
                                 let mut nested_field = #field_type::default();
                                 if let Document::Element(tag, content, _) = element {
                                     if let Document::Nested(inner_elements) = content.as_ref() {
                                         inner_elements.iter().try_for_each(
-                                            |inner_element| -> Result<()> {
+                                            |inner_element| -> Result<(),Box<dyn std::error::Error>> {
                                                 if let Document::Element(inner_tag, inner_content, _) = inner_element {
                                                     nested_field.update_field(inner_tag, inner_content)?;
                                                 }
@@ -670,7 +670,7 @@ impl<'a> FieldsContextRefs<'a> {
         let gen_impl = if !attribute_arms.is_empty() {
             quote! {
                 impl UpdateField for #struct_name {
-                    fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
+                    fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<(),Box<dyn std::error::Error>> {
                         #(#attribute_arms)*
                         match (tag.name.local_part.as_str(), doc) {
                             #(#arms)*
@@ -683,7 +683,7 @@ impl<'a> FieldsContextRefs<'a> {
         } else {
             quote! {
                 impl UpdateField for #struct_name {
-                    fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<()> {
+                    fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<(),Box<dyn std::error::Error>> {
                         match (tag.name.local_part.as_str(), doc) {
                             #(#arms)*
                             _ => Err(format!("Content is missing or unknown field `{}` in {}", tag.name.local_part.as_str(),stringify!(#struct_name)).into()),
