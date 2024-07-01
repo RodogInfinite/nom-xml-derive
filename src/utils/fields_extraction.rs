@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    marker::PhantomData,
-};
+use std::{collections::HashMap, marker::PhantomData};
 
 use proc_macro2::{Span, TokenTree};
 
@@ -37,6 +34,9 @@ pub struct VecField;
 pub struct VecOptionField;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct OptionVecOptionField;
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct OptionVecOptionSubField;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -67,23 +67,16 @@ pub trait ExtractFields {
         field_ident: &Ident,
         ty_ident: &Ident,
         replacement: &Option<String>,
-    ) -> Result<(), syn::Error>;
-}
-
-impl<State> ExtractFields for FieldTypes<State> {
-    fn extract_arguments(
-        &mut self,
-        arguments: &PathArguments,
-        field_ident: &Ident,
-        ty_ident: &Ident,
-        replacement: &Option<String>,
-    ) -> Result<(), syn::Error> {
+    ) -> Result<(), syn::Error>
+    where
+        Self: Sized + Default,
+    {
         match arguments {
             PathArguments::None => {
-                self.fields.push(field_ident.clone());
-                self.tys.push(ty_ident.clone());
+                self.get_fields().push(field_ident.clone());
+                self.get_tys().push(ty_ident.clone());
                 if let Some(replacement) = replacement {
-                    self.replacements
+                    self.get_replacements()
                         .insert(field_ident.clone(), replacement.clone());
                 };
                 Ok(())
@@ -111,22 +104,20 @@ impl<State> ExtractFields for FieldTypes<State> {
                             }
                             match ident.to_string().as_str() {
                                 "String" | "Vec" => {
-                                    self.fields.push(field_ident.clone());
-                                    self.tys.push(ident.clone());
+                                    self.get_fields().push(field_ident.clone());
+                                    self.get_tys().push(ident.clone());
                                     if let Some(replacement) = replacement {
-                                        self
-                                            .replacements
+                                        self.get_replacements()
                                             .insert(field_ident.clone(), replacement.clone());
                                     };
                                     Ok(())
                                 }
                                 _ => {
                                     if is_numeric_type(ident) {
-                                        self.fields.push(field_ident.clone());
-                                        self.tys.push(ident.clone());
+                                        self.get_fields().push(field_ident.clone());
+                                        self.get_tys().push(ident.clone());
                                         if let Some(replacement) = replacement {
-                                            self
-                                                .replacements
+                                            self.get_replacements()
                                                 .insert(field_ident.clone(), replacement.clone());
                                         };
                                         Ok(())
@@ -150,6 +141,23 @@ impl<State> ExtractFields for FieldTypes<State> {
                 format!("Parenthesized arguments not yet supported `{arguments:?}`"),
             )),
         }
+    }
+    fn get_fields(&mut self) -> &mut Vec<Ident>;
+    fn get_tys(&mut self) -> &mut Vec<Ident>;
+    fn get_replacements(&mut self) -> &mut HashMap<Ident, String>;
+}
+
+impl<State> ExtractFields for FieldTypes<State> {
+    fn get_fields(&mut self) -> &mut Vec<Ident> {
+        &mut self.fields
+    }
+
+    fn get_tys(&mut self) -> &mut Vec<Ident> {
+        &mut self.tys
+    }
+
+    fn get_replacements(&mut self) -> &mut HashMap<Ident, String> {
+        &mut self.replacements
     }
 }
 
@@ -317,6 +325,7 @@ impl<'a> FieldsContextRefs<'a> {
                                 }
                             } else {
                                 self.attributed_fields.fields.push(field_ident.clone());
+
                                 if let Some(replacement) = &replacement {
                                     self.attributed_fields
                                         .replacements
@@ -346,44 +355,37 @@ impl<'a> FieldsContextRefs<'a> {
             .iter()
             .try_for_each(|PathSegment { ident, arguments }| {
                 if let Some(field_ident) = self.field_ident {
-                    if let Some(attrs) = self.attrs {
-                        let ty_ident = ident;
-                        if ty_ident == "String" || is_numeric_type(ty_ident) {
-                            self.non_attributed_fields.extract_arguments(
-                                arguments,
-                                field_ident,
-                                ty_ident,
-                                replacement,
-                            )
-                        } else if ty_ident == "Vec" {
-                            extract_vec_field_arguments(
-                                arguments,
-                                field_ident,
-                                ty_ident,
-                                self,
-                                replacement,
-                            )
-                        } else if ty_ident == "Option" {
-                            extract_optional_arguments(
-                                arguments,
-                                field_ident,
-                                ty_ident,
-                                self,
-                                replacement,
-                            )
-                        } else {
-                            self.sub_fields.extract_arguments(
-                                arguments,
-                                field_ident,
-                                ty_ident,
-                                replacement,
-                            )
-                        }
+                    let ty_ident = ident;
+                    if ty_ident == "String" || is_numeric_type(ty_ident) {
+                        self.non_attributed_fields.extract_arguments(
+                            arguments,
+                            field_ident,
+                            ty_ident,
+                            replacement,
+                        )
+                    } else if ty_ident == "Vec" {
+                        extract_vec_field_arguments(
+                            arguments,
+                            field_ident,
+                            ty_ident,
+                            self,
+                            replacement,
+                        )
+                    } else if ty_ident == "Option" {
+                        extract_optional_arguments(
+                            arguments,
+                            field_ident,
+                            ty_ident,
+                            self,
+                            replacement,
+                        )
                     } else {
-                        Err(syn::Error::new(
-                            Span::call_site(),
-                            format!("Missing syn::Attribute, found `{:?}`", self.field),
-                        ))
+                        self.sub_fields.extract_arguments(
+                            arguments,
+                            field_ident,
+                            ty_ident,
+                            replacement,
+                        )
                     }
                 } else {
                     Err(syn::Error::new(
@@ -395,7 +397,7 @@ impl<'a> FieldsContextRefs<'a> {
     }
 }
 
-fn extract_arguments<State>(
+fn extract_arguments<State: std::fmt::Debug>(
     arguments: &PathArguments,
     field_ident: &Ident,
     ty_ident: &Ident,
@@ -411,6 +413,7 @@ fn extract_arguments<State>(
                     .replacements
                     .insert(field_ident.clone(), replacement.clone());
             };
+
             Ok(())
         }
         PathArguments::AngleBracketed(AngleBracketedGenericArguments {
@@ -592,13 +595,19 @@ fn extract_optional_arguments(
                                         };
                                         Ok(())
                                     } else {
-                                        extract_arguments(
+                                        ctx.sub_opt_fields.extract_arguments(
                                             arguments,
                                             field_ident,
-                                            ty_ident,
-                                            ctx.sub_opt_fields,
+                                            ident,
                                             replacement,
                                         )
+                                        // extract_arguments(
+                                        //     arguments,
+                                        //     field_ident,
+                                        //     ty_ident,
+                                        //     ctx.sub_opt_fields,
+                                        //     replacement,
+                                        // )
                                     }
                                 }
                             }
@@ -750,8 +759,8 @@ fn extract_vec_field_arguments(
                                 )
                             }
                             _ => {
-                                if is_numeric_type(ident) {
 
+                                if is_numeric_type(ident) {
                                     extract_arguments(
                                         arguments,
                                         field_ident,
@@ -887,15 +896,23 @@ fn extract_optional_vec_field_arguments(
                     else {
                         match ident.to_string().as_str() {
                             "String" | "Vec" => {
-                                Err(syn::Error::new(
-                                    Span::call_site(),
-                                    format!("opt_vec_fields not implemented yet: `{ident:?}` `{arguments:?}`")))
+                                extract_arguments(
+                                    arguments,
+                                    field_ident,
+                                    ident,
+                                    ctx.opt_vec_fields,
+                                    replacement,
+                                )
                             }
                             _ => {
                                 if is_numeric_type(ident) {
-                                    Err(syn::Error::new(
-                                        Span::call_site(),
-                                        format!("opt_vec_fields not implemented yet: `{ident:?}` `{arguments:?}`")))
+                                    extract_arguments(
+                                        arguments,
+                                        field_ident,
+                                        ident,
+                                        ctx.opt_vec_fields,
+                                        replacement,
+                                    )
                                 } else {
                                     extract_arguments(
                                         arguments,
@@ -984,15 +1001,23 @@ fn extract_option_vec_option_field_arguments(
                     else {
                         match ident.to_string().as_str() {
                             "String" | "Vec" => {
-                                Err(syn::Error::new(
-                                    Span::call_site(),
-                                    format!("opt_vec_fields not implemented yet: `{ident:?}` `{arguments:?}`")))
+                                extract_arguments(
+                                    arguments,
+                                    field_ident,
+                                    ident,
+                                    ctx.opt_vec_opt_fields,
+                                    replacement,
+                                )
                             }
                             _ => {
                                 if is_numeric_type(ident) {
-                                    Err(syn::Error::new(
-                                        Span::call_site(),
-                                        format!("opt_vec_fields not implemented yet: `{ident:?}` `{arguments:?}`")))
+                                    extract_arguments(
+                                        arguments,
+                                        field_ident,
+                                        ident,
+                                        ctx.opt_vec_opt_fields,
+                                        replacement,
+                                    )
                                 } else {
                                     extract_arguments(
                                         arguments,
