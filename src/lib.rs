@@ -2,7 +2,7 @@ mod utils;
 
 use utils::{get_standard_library_types, update_field::FieldsContext};
 
-#[proc_macro_derive(ExtractFields, attributes(extract_from))]
+#[proc_macro_derive(ExtractFields, attributes(extract))]
 pub fn derive_macro(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast: syn::DeriveInput = match syn::parse(input) {
         Ok(parsed) => parsed,

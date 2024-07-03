@@ -1,10 +1,11 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::{collections::HashMap, iter::Peekable, marker::PhantomData};
 
-use proc_macro2::{Span, TokenTree};
+// use proc_macro::TokenStream;
+use proc_macro2::{Span, TokenStream, TokenTree};
 
 use syn::{
     punctuated::Punctuated, token::PathSep, AngleBracketedGenericArguments, AttrStyle, Attribute,
-    DeriveInput, Field, Fields, GenericArgument, Ident, MacroDelimiter, Meta, MetaList,
+    DeriveInput, Field, Fields, GenericArgument, Ident, Macro, MacroDelimiter, Meta, MetaList,
     PathArguments, PathSegment,
 };
 
@@ -210,6 +211,250 @@ impl<'a> FieldsContextRefs<'a> {
 
         Ok::<(), syn::Error>(())
     }
+
+    fn check_tokens(
+        &mut self,
+        tokens: &TokenStream,
+        segments: &Punctuated<PathSegment, PathSep>,
+        segment_extracted: &mut bool,
+    ) -> Result<(), syn::Error> {
+            let mut token_iter = tokens.clone().into_iter().peekable();
+
+
+        let mut process_token = |iter: &mut Peekable<proc_macro2::token_stream::IntoIter>,
+                                 segments: &Punctuated<PathSegment, PathSep>,
+                                 segment_extracted: &mut bool|
+         -> Result<(), syn::Error> {
+            while let Some(token) = iter.next() {
+                match token {
+                    TokenTree::Ident(ident) => match ident.to_string().as_str() {
+                        "from_attribute" => {
+                            if let Some(TokenTree::Punct(punct)) = iter.next() {
+                                if punct.as_char() == '=' {
+                                    if let Some(TokenTree::Literal(lit)) = iter.next() {
+                                        let lit_str = lit.to_string();
+                                        if lit_str.starts_with('"') && lit_str.ends_with('"') {
+                                            let lit_value = lit_str.trim_matches('"').to_string();
+                                            self.extract_attribute_segments(
+                                                segments,
+                                                &Some(lit_value),
+                                            )?;
+                                            *segment_extracted = true;
+                                            
+                                            if let Some(TokenTree::Punct(punct)) = iter.peek() {
+                                                if punct.as_char() == ',' {
+                                                    
+                                                    continue;
+                                                } else {
+                                                    return Err(syn::Error::new(
+                                                        Span::call_site(),
+                                                        format!("Invalid tokens, expected `,`, found `{}`", punct),
+                                                    ));
+                                                }
+                                            }  else if let Some(TokenTree::Literal(lit)) = iter.peek() {
+                                                return Err(syn::Error::new(
+                                                    Span::call_site(),
+                                            format!("Invalid tokens, expected `,`, found `{}`", lit),
+                                                ));
+                                            } else if let None = iter.peek() {
+                                                break;
+                                            } else {
+                                                return Err(syn::Error::new(
+                                                    Span::call_site(),
+                                            format!("Invalid tokens, expectedz `,`, found `{}`", punct),
+                                                ));
+                                            };
+                                        } else {
+                                            return Err(syn::Error::new(
+                                                lit.span(),
+                                                format!(
+                                                    "Expected a string literal enclosed in quotes, found `{}`",
+                                                    lit_str
+                                                ),
+                                            ));
+                                        }
+                                    } else {
+                                        return Err(syn::Error::new(
+                                            Span::call_site(),
+                                            "Expected a literal after `=`".to_string(),
+                                        ));
+                                    }
+                                }
+                            } 
+                            else {
+                                self.extract_attribute_segments(segments, &None)?;
+                                *segment_extracted = true;
+                                // TODO: peek into the next iter, if it's not a `,` or isn't None, then give the error that the next branch has
+                            }
+                        }
+                        "from_tag" => {
+                            if let Some(TokenTree::Punct(punct)) = iter.next() {
+                                if punct.as_char() == '=' {
+                                    if let Some(TokenTree::Literal(lit)) = iter.next() {
+                                        let lit_str = lit.to_string();
+                                        if lit_str.starts_with('"') && lit_str.ends_with('"') {
+                                            let lit_value = lit_str.trim_matches('"').to_string();
+                                            self.extract_segments(segments, &Some(lit_value))?;
+                                            *segment_extracted = true;
+                                            if let Some(TokenTree::Punct(punct)) = iter.peek() {
+                                                if punct.as_char() == ',' {
+                                                   
+                                                    continue;
+                                                } else {
+                                                    return Err(syn::Error::new(
+                                                        Span::call_site(),
+                                                        format!("Invalid tokens, expected `,`, found `{}`", punct),
+                                                    ));
+                                                }
+                                            }  else if let Some(TokenTree::Literal(lit)) = iter.peek() {
+                                                return Err(syn::Error::new(
+                                                    Span::call_site(),
+                                            format!("Invalid tokens, expected `,`, found `{}`", lit),
+                                                ));
+                                            } else if let None = iter.peek() {
+                                                break;
+                                            } else {
+                                                return Err(syn::Error::new(
+                                                    Span::call_site(),
+                                            format!("Invalid tokens, expected `,`, found `{}`", punct),
+                                                ));
+                                            };
+                                        } else {
+                                            return Err(syn::Error::new(
+                                                lit.span(),
+                                                format!(
+                                                    "Expected a string literal enclosed in quotes, found `{}`",
+                                                    lit_str
+                                                ),
+                                            ));
+                                        }
+                                    } else {
+                                        return Err(syn::Error::new(
+                                            Span::call_site(),
+                                            "Expected a literal after `=`".to_string(),
+                                        ));
+                                    }
+                                } else {
+                                    return Err(syn::Error::new(
+                                        Span::call_site(),
+                                        "Expected `=` after `from_tag`".to_string(),
+                                    ));
+                                }
+                            }
+                            return Err(syn::Error::new(
+                                Span::call_site(),
+                                "Expected `=` after `from_tag`".to_string(),
+                            ));
+                        }
+                        "with_strategy" => {
+                            if let Some(TokenTree::Punct(punct)) = iter.next() {
+                                if punct.as_char() == '=' {
+                                    if let Some(TokenTree::Ident(strategy_ident)) = iter.next() {
+                                        if strategy_ident == "direct" {
+                                            *segment_extracted = true;
+
+                                            if let Some(TokenTree::Punct(punct)) = iter.peek() {
+                                                if punct.as_char() == ',' {
+                                                    
+                                                    continue;
+                                                } else {
+                                                    return Err(syn::Error::new(
+                                                        Span::call_site(),
+                                                        format!("Invalid tokens, expected `,`, found `{}`", punct),
+                                                    ));
+                                                }
+                                            }  else if let Some(TokenTree::Literal(lit)) = iter.peek() {
+                                                return Err(syn::Error::new(
+                                                    Span::call_site(),
+                                            format!("Invalid tokens, expected `,`, found `{}`", lit),
+                                                ));
+                                            } else if let None = iter.peek() {
+                                                break;
+                                            } else {
+                                                return Err(syn::Error::new(
+                                                    Span::call_site(),
+                                            format!("Invalid tokens, expected z`,`, found `{}`", punct),
+                                                ));
+                                            };
+                                        } else {
+                                            return Err(syn::Error::new(
+                                                Span::call_site(),
+                                                "Expected `direct` after `with_strategy =`"
+                                                    .to_string(),
+                                            ));
+                                        }
+                                    } else {
+                                        return Err(syn::Error::new(
+                                            Span::call_site(),
+                                            "Expected identifier after `with_strategy =`"
+                                                .to_string(),
+                                        ));
+                                    }
+                                } else {
+                                    return Err(syn::Error::new(
+                                        Span::call_site(),
+                                        "Expected `=` after `with_strategy`".to_string(),
+                                    ));
+                                }
+                            } else {
+                                return Err(syn::Error::new(
+                                    Span::call_site(),
+                                    "Expected `=` after `with_strategy`".to_string(),
+                                ));
+                            }
+                        }
+
+                        _ => {
+                            return Err(syn::Error::new(
+                                Span::call_site(),
+                                format!(
+                                    "Invalid tokens, expected `attribute` or `tag`, found `{}`",
+                                    ident
+                                ),
+                            ));
+                        }
+                    },
+                    TokenTree::Punct(punct) => {
+                        if punct.as_char() == ',' {
+                            continue;
+                        } else {
+                            return Err(syn::Error::new(
+                                Span::call_site(),
+                                format!("Invalid tokens, expected `,`, found `{}`", punct),
+                            ));
+                        }
+                        
+                    }
+                    // TokenTree::Literal(lit) => { //TODO: pretty sure this should be an error
+                    //     let lit_str = lit.to_string();
+                    //     if lit_str.starts_with('"') && lit_str.ends_with('"') {
+                    //         let lit_value = lit_str.trim_matches('"').to_string();
+                    //         self.extract_segments(segments, &Some(lit_value))?;
+                    //         *segment_extracted = true;
+                    //     } else {
+                    //         return Err(syn::Error::new(
+                    //             lit.span(),
+                    //             format!(
+                    //                 "Expected a string literal enclosed in quotes, found `{}`",
+                    //                 lit_str
+                    //             ),
+                    //         ));
+                    //     }
+                    // }
+                    _ => {
+                        return Err(syn::Error::new(
+                            Span::call_site(),
+                            format!("Expected TokenTree, found `{}`", token),
+                        ));
+                    }
+                }
+            }
+            Ok(())
+        };
+
+        process_token(&mut token_iter, segments, segment_extracted)
+    }
+
     fn parse_macro_attributes(
         &mut self,
         attrs: &[Attribute],
@@ -217,92 +462,50 @@ impl<'a> FieldsContextRefs<'a> {
     ) -> Result<(), syn::Error> {
         let mut segment_extracted = false;
 
-        attrs.iter().try_for_each(|attr| {
-            if let Attribute {
-                pound_token: _,
-                style: AttrStyle::Outer,
-                bracket_token: _,
-                meta:
-                    Meta::List(MetaList {
-                        path,
-                        delimiter: MacroDelimiter::Paren(_),
-                        tokens,
-                    }),
-            } = &attr
-            {
-                path.segments.iter().try_for_each(|PathSegment { ident, arguments: _ }| {
-                    if ident != "extract_from" {
-                        Err(syn::Error::new(
-                            Span::call_site(),
-                            format!("Invalid attribute, expected `extract_from`, found `{ident}`"),
-                        ))
-                    } else {
-                        tokens.clone().into_iter().try_for_each(|token| {
-                            match token {
-                                TokenTree::Ident(ident) => {
-                                    match ident.to_string().as_str() {
-                                        "attribute" => {
-                                            self.extract_attribute_segments(segments, &None)?;
-                                            segment_extracted = true;
-                                            Ok(())
-                                        }
-                                        "tag" => Ok(()),
-                                        _ => Err(syn::Error::new(
-                                            Span::call_site(),
-                                            format!(
-                                                "Invalid tokens, expected `attribute` or `tag`, found `{ident}`"
-                                            ),
-                                        )),
-                                    }
-                                }
-                                TokenTree::Punct(punct) => {
-                                    if punct.as_char() == '=' {
-                                        Ok(())
-                                    } else {
-                                        Err(syn::Error::new(
-                                            Span::call_site(),
-                                            format!(
-                                                "Invalid tokens, expected `=`, found `{punct}`"
-                                            ),
-                                        ))
-                                    }
-                                }
-                                TokenTree::Literal(lit) => {
-                                    let lit_str = lit.to_string();
-                                    if lit_str.starts_with('"') && lit_str.ends_with('"') {
-                                        let lit_value = lit_str.trim_matches('"').to_string();
-                                        self.extract_segments(segments, &Some(lit_value))?;
-                                        segment_extracted = true;
-                                        Ok(())
-                                    } else {
-                                        Err(syn::Error::new(
-                                            lit.span(),
-                                            format!("Expected a string literal enclosed in quotes, found `{}`", lit_str),
-                                        ))
-                                    }
-                                }
-                                _ => Err(syn::Error::new(
-                                    Span::call_site(),
-                                    format!("Expected TokenTree, found `{token}`"),
-                                )),
+        attrs
+            .iter()
+            .try_for_each(|attr| -> Result<(), syn::Error> {
+                if let Attribute {
+                    pound_token: _,
+                    style: AttrStyle::Outer,
+                    bracket_token: _,
+                    meta:
+                        Meta::List(MetaList {
+                            path,
+                            delimiter: MacroDelimiter::Paren(_),
+                            tokens,
+                        }),
+                } = &attr
+                {
+                    path.segments.iter().try_for_each(
+                        |PathSegment {
+                             ident,
+                             arguments: _,
+                         }| match ident.to_string().as_str() {
+                            "extract" => {
+                                self.check_tokens(tokens, segments, &mut segment_extracted)
                             }
-                        })
-                    }
-                })
-            } else {
-                Err(syn::Error::new(
-                    Span::call_site(),
-                    format!("Expected syn::Attribute, found `{attr:?}`"),
-                ))
-            }
-        })?;
+                            _ => Err(syn::Error::new(
+                                Span::call_site(),
+                                format!(
+                                    "Invalid attribute ident, expected `extract`, found `{ident}`"
+                                ),
+                            )),
+                        },
+                    )
+                } else {
+                    Ok(())
+                }
+            })?;
 
         if !segment_extracted {
             self.extract_segments(segments, &None)
         } else {
             Ok(())
         }
+        // Ok(())
     }
+
     fn extract_attribute_segments(
         &mut self,
         segments: &Punctuated<PathSegment, PathSep>,

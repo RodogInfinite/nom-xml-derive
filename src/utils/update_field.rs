@@ -52,7 +52,6 @@ pub trait GenerateFields<State> {
                         .get(field_name)
                         .map(|replacement| quote! { #replacement })
                         .unwrap_or_else(|| quote! { stringify!(#field_name) });
-
                     self.generate_attribute_fields_quote(&field, field_name)
                 })
                 .collect();
@@ -73,9 +72,7 @@ pub trait GenerateFields<State> {
                     },
                 )
                 .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
-
             let gen_fields = self.generate_return_quote(gen_fields_quote)?;
-
             if !gen_attributes_fields.is_empty() {
                 let gen_attributes_quote =
                     self.generate_attributed_return_quote(gen_attributes_fields)?;
@@ -390,7 +387,7 @@ pub trait GenerateFields<State> {
                         }
                     })?;
                 Ok(())
-            }
+            } (_,Document::Element(tag,docu,_)) => Ok(()),
         }))
     }
 
@@ -449,7 +446,7 @@ pub trait GenerateFields<State> {
                     );
                 }},
                 quote! {unimplemented!("Document::Empty for Vec<field_type> is not yet implemented")},
-                quote! { self.#field_name.push(nested_field.clone()); },
+                quote! { self.#field_name.push(nested_field.clone());},
                 quote! {},
             ),
             SubFieldType::VecOption => (
@@ -527,9 +524,10 @@ pub trait GenerateFields<State> {
                             #push_quote
                             nested_field = #field_type::default();
                         }
-                    } else if nested_field != #field_type::default() { #push_quote}
+                    }
                     Ok(())
                 })?;
+                if !has_nested_elements && nested_field != #field_type::default() { #push_quote}
                 Ok(())
             }
             #optional_doc_empty_outer_quote
