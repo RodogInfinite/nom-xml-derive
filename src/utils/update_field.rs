@@ -72,7 +72,21 @@ pub trait GenerateFields<State> {
                     },
                 )
                 .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
-            let gen_fields = self.generate_return_quote(gen_fields_quote)?;
+                let field_names = self
+                .fields()
+                .iter()
+                .map(
+                    |field_name| -> Result<TokenStream, syn::Error> {
+                        Ok(self
+                            .replacements()
+                            .get(field_name)
+                            .map(|replacement| quote! { #replacement })
+                            .unwrap_or_else(|| quote! { stringify!(#field_name) }))
+
+                    },
+                )
+                .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
+            let gen_fields = self.generate_return_quote(field_names,gen_fields_quote)?;
             if !gen_attributes_fields.is_empty() {
                 let gen_attributes_quote =
                     self.generate_attributed_return_quote(gen_attributes_fields)?;
@@ -116,14 +130,10 @@ pub trait GenerateFields<State> {
     ) -> Result<TokenStream, syn::Error> {
         match self.state() {
             id if id == TypeId::of::<SubField>() => Ok(quote! {
-                #field => {
-                    #field_type::update_fields(inner_doc, &mut self.#field_name)?;
-                }
+                self.#field_name.update_fields(&doc)
             }),
             id if id == TypeId::of::<SubOptionField>() => Ok(quote! {
-                #field => {
-                    Self::update_optional_fields(inner_doc, &mut self.#field_name)?;
-                }
+                self.#field_name.update_fields(&doc)
             }),
             id if id == TypeId::of::<NonAttributed>() => match field_type.to_string().as_str() {
                 "String" => Ok(quote! {
@@ -190,7 +200,8 @@ pub trait GenerateFields<State> {
                                 return Ok(());
                             }
                         })
-                    } else {
+                    } 
+                    else {
                         Err(syn::Error::new(
                             Span::call_site(),
                             format!("Unknown Field: `{field_name:?}`"),
@@ -299,6 +310,7 @@ pub trait GenerateFields<State> {
 
     fn generate_return_quote(
         &self,
+        field_names:Vec<TokenStream>,
         gen_fields: Vec<TokenStream>,
     ) -> Result<Option<TokenStream>, syn::Error> {
         let state_id = self.state();
@@ -311,7 +323,7 @@ pub trait GenerateFields<State> {
             _ if state_id == TypeId::of::<SubField>()
                 || state_id == TypeId::of::<SubOptionField>() =>
             {
-                self.generate_subfield_return_quote(gen_fields)
+                self.generate_subfield_return_quote(field_names,gen_fields)
             }
             _ if state_id == TypeId::of::<VecField>()
                 || state_id == TypeId::of::<VecOptionField>()
@@ -330,6 +342,7 @@ pub trait GenerateFields<State> {
             _ => Ok(None),
         }
     }
+
     fn generate_attributed_return_quote(
         &self,
         gen_fields: Vec<TokenStream>,
@@ -368,26 +381,14 @@ pub trait GenerateFields<State> {
 
     fn generate_subfield_return_quote(
         &self,
+        field_names: Vec<TokenStream>,
         gen_fields: Vec<TokenStream>,
     ) -> Result<Option<TokenStream>, syn::Error> {
         Ok(Some(quote! {
-            (_, Document::Nested(_)) => {
-                doc.iter_with_depth(1)
-                    .try_for_each(|element| -> Result<(),Box<dyn std::error::Error>> {
-                        if let Document::Element(tag, inner_doc, _) = element {
-                            match tag.name.local_part.as_str() {
-                                #(#gen_fields,)*
-                                _ => {
-                                    self.update_field(tag, inner_doc)?;
-                                }
-                            }
-                            Ok(())
-                        } else {
-                            return Err(format!("Unknown field: {element:#?}").into());
-                        }
-                    })?;
-                Ok(())
-            } (_,Document::Element(tag,docu,_)) => Ok(()),
+            #((#field_names, Document::Nested(_)) => {
+                #gen_fields
+            })*
+
         }))
     }
 
@@ -412,6 +413,7 @@ pub trait GenerateFields<State> {
             }
         }))
     }
+
     fn generate_vec_subfield_return_quote(
         &self,
         gen_fields: Vec<TokenStream>,
@@ -488,28 +490,21 @@ pub trait GenerateFields<State> {
                 elements.iter().try_for_each(|element| -> Result<(), Box<dyn std::error::Error>> {
                     match element {
                         Document::Element(tag, content, _) =>{
-
-                        match content.as_ref() {
-                            Document::Nested(inner_elements) => {
-                                has_nested_elements = true;
-                                inner_elements.iter().try_for_each(|inner_element| -> Result<(), Box<dyn std::error::Error>> {
-                                    if let Document::Element(inner_tag, inner_content, _) = inner_element {
-                                        nested_field.update_field(inner_tag, inner_content)?;
-                                    }
-                                    Ok(())
-                                }).or_else(|_| {
-                                    nested_field.update_field(tag, content)
-                                })?;
+                            nested_field.update_attribute_fields(tag)?;
+                            match content.as_ref() {
+                                Document::Nested(inner_elements) => {
+                                    has_nested_elements = true;
+                                    nested_field.update_fields(content)?;
+                                }
+                                Document::Content(Some(_)) => {
+                                    nested_field.update_field(tag, content)?;
+                                }
+                                Document::Empty => {
+                                    #optional_doc_empty_inner_quote
+                                }
+                                _ => {}
                             }
-                            Document::Content(Some(_)) => {
-                                nested_field.update_field(tag, content)?;
-                            }
-                            Document::Empty => {
-                                #optional_doc_empty_inner_quote
-                            }
-                            _ => {}
                         }
-                    }
                         Document::Empty => {
                             #handle_empty_quote
                         }
@@ -697,12 +692,11 @@ impl<'a> FieldsContextRefs<'a> {
 
         let gen_impl = if !attribute_arms.is_empty() {
             quote! {
-                impl UpdateField for #struct_name {
+                impl UpdateFields for #struct_name {
                     fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<(),Box<dyn std::error::Error>> {
                         #(#attribute_arms)*
                         match (tag.name.local_part.as_str(), doc) {
                             #(#arms)*
-
                             _ => Err(format!("Content is missing or unknown field `{}` in {}", tag.name.local_part.as_str(),stringify!(#struct_name)).into()),
                         }
                     }
@@ -711,33 +705,16 @@ impl<'a> FieldsContextRefs<'a> {
                         Ok(())
                     }
                 }
-                impl #struct_name {
-                    fn update_fields(
-                        doc: &Document,
-                        target: &mut Self,
-                    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-                        <Self as UpdateField>::update_fields(doc, target)
-                    }
-                }
             }
         } else {
             quote! {
-                impl UpdateField for #struct_name {
+                impl UpdateFields for #struct_name {
                     fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<(),Box<dyn std::error::Error>> {
                         match (tag.name.local_part.as_str(), doc) {
                             #(#arms)*
                             _ => Err(format!("Content is missing or unknown field `{}` in {}", tag.name.local_part.as_str(),stringify!(#struct_name)).into()),
                         }
                     }
-                }
-                impl #struct_name {
-                    fn update_fields(
-                        doc: &Document,
-                        target: &mut Self,
-                    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-                        <Self as UpdateField>::update_fields(doc, target)
-                    }
-
                 }
 
             }

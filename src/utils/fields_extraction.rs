@@ -1,11 +1,10 @@
 use std::{collections::HashMap, iter::Peekable, marker::PhantomData};
 
-// use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream, TokenTree};
 
 use syn::{
     punctuated::Punctuated, token::PathSep, AngleBracketedGenericArguments, AttrStyle, Attribute,
-    DeriveInput, Field, Fields, GenericArgument, Ident, Macro, MacroDelimiter, Meta, MetaList,
+    DeriveInput, Field, Fields, GenericArgument, Ident, MacroDelimiter, Meta, MetaList,
     PathArguments, PathSegment,
 };
 
@@ -284,7 +283,6 @@ impl<'a> FieldsContextRefs<'a> {
                             else {
                                 self.extract_attribute_segments(segments, &None)?;
                                 *segment_extracted = true;
-                                // TODO: peek into the next iter, if it's not a `,` or isn't None, then give the error that the next branch has
                             }
                         }
                         "from_tag" => {
@@ -425,22 +423,6 @@ impl<'a> FieldsContextRefs<'a> {
                         }
                         
                     }
-                    // TokenTree::Literal(lit) => { //TODO: pretty sure this should be an error
-                    //     let lit_str = lit.to_string();
-                    //     if lit_str.starts_with('"') && lit_str.ends_with('"') {
-                    //         let lit_value = lit_str.trim_matches('"').to_string();
-                    //         self.extract_segments(segments, &Some(lit_value))?;
-                    //         *segment_extracted = true;
-                    //     } else {
-                    //         return Err(syn::Error::new(
-                    //             lit.span(),
-                    //             format!(
-                    //                 "Expected a string literal enclosed in quotes, found `{}`",
-                    //                 lit_str
-                    //             ),
-                    //         ));
-                    //     }
-                    // }
                     _ => {
                         return Err(syn::Error::new(
                             Span::call_site(),
@@ -503,7 +485,7 @@ impl<'a> FieldsContextRefs<'a> {
         } else {
             Ok(())
         }
-        // Ok(())
+
     }
 
     fn extract_attribute_segments(
@@ -804,13 +786,6 @@ fn extract_optional_arguments(
                                             ident,
                                             replacement,
                                         )
-                                        // extract_arguments(
-                                        //     arguments,
-                                        //     field_ident,
-                                        //     ty_ident,
-                                        //     ctx.sub_opt_fields,
-                                        //     replacement,
-                                        // )
                                     }
                                 }
                             }
