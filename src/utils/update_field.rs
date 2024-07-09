@@ -46,16 +46,20 @@ pub trait GenerateFields<State> {
             let gen_attributes_fields: Vec<TokenStream> = self
                 .fields()
                 .iter()
-                .filter_map(|field_name| -> Option<TokenStream> {
-                    let field = self
-                        .replacements()
-                        .get(field_name)
-                        .map(|replacement| quote! { #replacement })
-                        .unwrap_or_else(|| quote! { stringify!(#field_name) });
-                    self.generate_attribute_fields_quote(&field, field_name)
-                })
-                .collect();
+                .zip(self.tys().iter())
+                .flat_map(
+                    |(field_name, field_type)| -> Option<Result<TokenStream, syn::Error>> {
+                        let field = self
+                            .replacements()
+                            .get(field_name)
+                            .map(|replacement| quote! { #replacement })
+                            .unwrap_or_else(|| quote! { stringify!(#field_name) });
 
+                        self.generate_attribute_fields_quote(&field, field_name, field_type)
+                            .transpose()
+                    },
+                )
+                .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
             let gen_fields_quote: Vec<TokenStream> = self
                 .fields()
                 .iter()
@@ -72,21 +76,20 @@ pub trait GenerateFields<State> {
                     },
                 )
                 .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
-                let field_names = self
+
+            let field_names = self
                 .fields()
                 .iter()
-                .map(
-                    |field_name| -> Result<TokenStream, syn::Error> {
-                        Ok(self
-                            .replacements()
-                            .get(field_name)
-                            .map(|replacement| quote! { #replacement })
-                            .unwrap_or_else(|| quote! { stringify!(#field_name) }))
-
-                    },
-                )
+                .map(|field_name| -> Result<TokenStream, syn::Error> {
+                    Ok(self
+                        .replacements()
+                        .get(field_name)
+                        .map(|replacement| quote! { #replacement })
+                        .unwrap_or_else(|| quote! { stringify!(#field_name) }))
+                })
                 .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
-            let gen_fields = self.generate_return_quote(field_names,gen_fields_quote)?;
+            let gen_fields = self.generate_return_quote(field_names, gen_fields_quote)?;
+
             if !gen_attributes_fields.is_empty() {
                 let gen_attributes_quote =
                     self.generate_attributed_return_quote(gen_attributes_fields)?;
@@ -104,21 +107,59 @@ pub trait GenerateFields<State> {
         &self,
         field: &TokenStream,
         field_name: &Ident,
-    ) -> Option<TokenStream> {
+        field_type: &Ident,
+    ) -> Result<Option<TokenStream>, syn::Error>
+    where
+        Self: std::fmt::Debug,
+    {
         match self.state() {
-            id if id == TypeId::of::<Attributed>() => Some(quote! {
-                #field => {
-                    self.#field_name = attr_val.into();
-                    Ok(())
+            id if id == TypeId::of::<Attributed>() => match field_type.to_string().as_str() {
+                "String" => Ok(Some(quote! {
+                    #field => {
+                        self.#field_name = attr_val.to_string();
+                        Ok(())
+                    }
+                })),
+                _ => {
+                    if is_numeric_type(field_type) {
+                        Ok(Some(quote! {
+                            #field => {
+                                self.#field_name = attr_val.parse::<#field_type>()?;
+                                Ok(())
+                            }
+                        }))
+                    } else {
+                        Err(syn::Error::new(
+                            Span::call_site(),
+                            format!("Unknown Field: `{field_name:?}`"),
+                        ))
+                    }
                 }
-            }),
-            id if id == TypeId::of::<AttributedOption>() => Some(quote! {
-                #field => {
-                    self.#field_name = Some(attr_val.into());
-                    Ok(())
+            },
+            id if id == TypeId::of::<AttributedOption>() => match field_type.to_string().as_str() {
+                "String" => Ok(Some(quote! {
+                    #field => {
+                        self.#field_name = Some(attr_val.to_string());
+                        Ok(())
+                    }
+                })),
+                _ => {
+                    if is_numeric_type(field_type) {
+                        Ok(Some(quote! {
+                            #field=> {
+                                self.#field_name = Some(attr_val.parse::<#field_type>()?);
+                                Ok(())
+                            }
+                        }))
+                    } else {
+                        Err(syn::Error::new(
+                            Span::call_site(),
+                            format!("Unknown Field: `{field_name:?}` with type `{field_type:?}`"),
+                        ))
+                    }
                 }
-            }),
-            _ => None,
+            },
+            _ => Ok(None),
         }
     }
 
@@ -200,8 +241,7 @@ pub trait GenerateFields<State> {
                                 return Ok(());
                             }
                         })
-                    } 
-                    else {
+                    } else {
                         Err(syn::Error::new(
                             Span::call_site(),
                             format!("Unknown Field: `{field_name:?}`"),
@@ -310,7 +350,7 @@ pub trait GenerateFields<State> {
 
     fn generate_return_quote(
         &self,
-        field_names:Vec<TokenStream>,
+        field_names: Vec<TokenStream>,
         gen_fields: Vec<TokenStream>,
     ) -> Result<Option<TokenStream>, syn::Error> {
         let state_id = self.state();
@@ -323,7 +363,7 @@ pub trait GenerateFields<State> {
             _ if state_id == TypeId::of::<SubField>()
                 || state_id == TypeId::of::<SubOptionField>() =>
             {
-                self.generate_subfield_return_quote(field_names,gen_fields)
+                self.generate_subfield_return_quote(field_names, gen_fields)
             }
             _ if state_id == TypeId::of::<VecField>()
                 || state_id == TypeId::of::<VecOptionField>()
