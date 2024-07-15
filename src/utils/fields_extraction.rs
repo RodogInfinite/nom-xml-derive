@@ -235,6 +235,7 @@ impl<'a> FieldsContextRefs<'a> {
                                             if lit_str.starts_with('"') && lit_str.ends_with('"') {
                                                 let lit_value =
                                                     lit_str.trim_matches('"').to_string();
+
                                                 self.extract_attribute_segments(
                                                     segments,
                                                     &Some(lit_value),
@@ -262,7 +263,7 @@ impl<'a> FieldsContextRefs<'a> {
                                                 } else {
                                                     return Err(syn::Error::new(
                                                     Span::call_site(),
-                                            format!("Invalid tokens, expectedz `,`, found `{}`", punct),
+                                            format!("Invalid tokens, expected `,`, found `{}`", punct),
                                                 ));
                                                 };
                                             } else {

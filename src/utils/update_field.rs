@@ -60,6 +60,7 @@ pub trait GenerateFields<State> {
                     },
                 )
                 .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
+
             let gen_fields_quote: Vec<TokenStream> = self
                 .fields()
                 .iter()
@@ -88,6 +89,7 @@ pub trait GenerateFields<State> {
                         .unwrap_or_else(|| quote! { stringify!(#field_name) }))
                 })
                 .collect::<Result<Vec<TokenStream>, syn::Error>>()?;
+
             let gen_fields = self.generate_return_quote(field_names, gen_fields_quote)?;
 
             if !gen_attributes_fields.is_empty() {
@@ -116,6 +118,7 @@ pub trait GenerateFields<State> {
             id if id == TypeId::of::<Attributed>() => match field_type.to_string().as_str() {
                 "String" => Ok(Some(quote! {
                     #field => {
+
                         self.#field_name = attr_val.to_string();
                         Ok(())
                     }
@@ -171,10 +174,12 @@ pub trait GenerateFields<State> {
     ) -> Result<TokenStream, syn::Error> {
         match self.state() {
             id if id == TypeId::of::<SubField>() => Ok(quote! {
-                self.#field_name.update_fields(&doc)
+                {
+                self.#field_name.update_fields( &doc)
+            }
             }),
             id if id == TypeId::of::<SubOptionField>() => Ok(quote! {
-                self.#field_name.update_fields(&doc)
+                self.#field_name.update_fields( &doc)
             }),
             id if id == TypeId::of::<NonAttributed>() => match field_type.to_string().as_str() {
                 "String" => Ok(quote! {
@@ -386,9 +391,13 @@ pub trait GenerateFields<State> {
     fn generate_attributed_return_quote(
         &self,
         gen_fields: Vec<TokenStream>,
-    ) -> Result<Option<TokenStream>, syn::Error> {
+    ) -> Result<Option<TokenStream>, syn::Error>
+    where
+        Self: std::fmt::Debug,
+    {
         Ok(Some(quote! {
             if let Some(attributes) = &tag.attributes {
+
                 attributes.iter().try_for_each(|attr| -> Result<(),Box<dyn std::error::Error>> {
                     if let Attribute::Instance {
                         name,
@@ -403,6 +412,7 @@ pub trait GenerateFields<State> {
                     }
                 })?;
             }
+            Ok(())
         }))
     }
 
@@ -426,6 +436,9 @@ pub trait GenerateFields<State> {
     ) -> Result<Option<TokenStream>, syn::Error> {
         Ok(Some(quote! {
             #((#field_names, Document::Nested(_)) => {
+                #gen_fields
+            })*
+            #((#field_names,Document::Empty) => {
                 #gen_fields
             })*
 
@@ -724,26 +737,101 @@ impl<'a> FieldsContextRefs<'a> {
         .flatten()
         .collect();
 
+        let sub_fields = self.sub_fields.fields();
+        let opt_sub_fields = self.sub_opt_fields.fields();
+        let vec_opt_sub_fields = self.vec_opt_sub_fields.fields();
+        let opt_vec_sub_fields = self.opt_vec_sub_fields.fields();
+        let update_fields_quote = quote! {
+
+                match doc {
+
+                Document::Element(tag, nested_doc, _) => {
+                    match tag.name.local_part.as_str() {
+                    #(stringify!(#sub_fields) => {
+                        self.#sub_fields.update_fields(nested_doc)
+                    })*
+                    #(stringify!(#opt_sub_fields) => {
+                        self.#opt_sub_fields.update_fields(nested_doc)
+                    })*
+                    _ => {
+                        self.update_attribute_fields(tag)?;
+                        self.update_fields(nested_doc)}
+                }
+                }
+                    Document::Nested(elements) => {
+                        elements
+                            .iter_with_depth(0)
+                            .filter_map(|element| {
+                                if let Document::Element(tag, inner_doc, _) = element {
+                                    Some((tag, inner_doc))
+                                } else {
+                                    None
+                                }
+                            })
+                            .try_for_each(|(tag, inner_doc)| {
+                                match tag.name.local_part.as_str() {
+
+
+                                    #(stringify!(#sub_fields) => {
+                                        self.#sub_fields.update_attribute_fields(tag)?;
+                                        self.#sub_fields.update_fields(inner_doc)
+                                    })*
+                                    _ => {
+                                        self.update_attribute_fields(tag)?;
+                                        self.update_field(&tag,inner_doc)}
+                                }
+                            })
+                    }
+                    _ => Ok(()),
+
+            }
+        };
+
         let attribute_arms: Vec<TokenStream> =
             vec![gen_attributed_fields, gen_attributed_opt_fields]
                 .into_iter()
                 .flatten()
                 .collect();
 
-        let gen_impl = if !attribute_arms.is_empty() {
+        let gen_impl = if !attribute_arms.is_empty() && !arms.is_empty() {
+            quote! {
+                impl UpdateFields for #struct_name {
+                    fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<(),Box<dyn std::error::Error>> {
+
+                        match (tag.name.local_part.as_str(), doc) {
+                            #(#arms)*
+                            _ => Err(format!("Content is missing or unknown field `{}` in {}", tag.name.local_part.as_str(),stringify!(#struct_name)).into()),
+                        };
+                        #(#attribute_arms)*
+                    }
+                    fn update_attribute_fields(&mut self, tag: &Tag,) -> Result<(),Box<dyn std::error::Error>> {
+                        #(#attribute_arms)*
+                        // Ok(())
+                    }
+                    fn update_fields(&mut self, doc: &Document) -> Result<(), Box<dyn std::error::Error>>
+                where
+                    Self: std::fmt::Debug,
+                {
+                        #update_fields_quote
+                }
+                }
+            }
+        } else if !attribute_arms.is_empty() && arms.is_empty() {
             quote! {
                 impl UpdateFields for #struct_name {
                     fn update_field(&mut self, tag: &Tag, doc: &Document) -> Result<(),Box<dyn std::error::Error>> {
                         #(#attribute_arms)*
-                        match (tag.name.local_part.as_str(), doc) {
-                            #(#arms)*
-                            _ => Err(format!("Content is missing or unknown field `{}` in {}", tag.name.local_part.as_str(),stringify!(#struct_name)).into()),
-                        }
                     }
                     fn update_attribute_fields(&mut self, tag: &Tag,) -> Result<(),Box<dyn std::error::Error>> {
                         #(#attribute_arms)*
-                        Ok(())
+                        // Ok(())
                     }
+                    fn update_fields(&mut self, doc: &Document) -> Result<(), Box<dyn std::error::Error>>
+                    where
+                    Self: std::fmt::Debug,
+                {
+                        #update_fields_quote
+                }
                 }
             }
         } else {
@@ -754,6 +842,12 @@ impl<'a> FieldsContextRefs<'a> {
                             #(#arms)*
                             _ => Err(format!("Content is missing or unknown field `{}` in {}", tag.name.local_part.as_str(),stringify!(#struct_name)).into()),
                         }
+                    }
+                    fn update_fields(&mut self, doc: &Document) -> Result<(), Box<dyn std::error::Error>>
+                    where
+                        Self: std::fmt::Debug,
+                    {
+                            #update_fields_quote
                     }
                 }
 
