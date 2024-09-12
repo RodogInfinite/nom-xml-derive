@@ -1,6 +1,6 @@
 # Nom-XML-Derive
 
-`nom-xml-derive` is a crate for extracting data from [`nom-xml's`](https://crates.io/crates/nom-xml) `Document` type into structs. Due to the nested nature of XML, the interface for extracting information from `nom-xml's` `Document` type can be tedious to implement for users. This derive macro crate was established to reduce that burden on users.
+`nom-xml-derive` is a crate for extracting data from [`nom-xml`](https://crates.io/crates/nom-xml) version 0.3.0+'s `Document` type into structs. Due to the nested nature of XML, the interface for extracting information from `nom-xml`'s `Document` type can be tedious to implement for users. This derive macro crate was established to reduce that burden on users.
 
 ## Let's look at an example:
 
@@ -293,6 +293,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
 Note: in the latter example, `book.update_fields(&doc)?;` is used in `main(){...}` instead of manually iterating over the document. This compile-time-generated method is essentially doing that work for you. For more, see the examples and tests in [`nom-xml`](https://github.com/RodogInfinite/NomExML).
 
 # Currently Supported Field Types:
