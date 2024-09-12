@@ -2,7 +2,7 @@
 
 `nom-xml-derive` is a crate for extracting data from [`nom-xml's`](https://crates.io/crates/nom-xml) `Document` type into structs. Due to the nested nature of XML, the interface for extracting information from `nom-xml's` `Document` type can be tedious to implement for users. This derive macro crate was established to reduce that burden on users.
 
-## Let's look an an example:
+## Let's look at an example:
 
 If we wanted to extract the first book in a catalog, we would need to manually implement the UpdateFields trait for each struct:
 ```rust
@@ -217,7 +217,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ---
 
 
-Whereas if we use `nom-xml-derive` crate with `nom-xml` we would simply decorate each struct with `#[derive(Debug, Default, Clone, ExtractFields, PartialEq)]` and subsequent "special" fields with `#[extract(<behavior>)]`. This results in those methods being generated at compile time significantly reducing the boilerplate needed:
+Whereas if we use the `nom-xml-derive` crate with `nom-xml` we would simply decorate each struct with `#[derive(Debug, Default, Clone, ExtractFields, PartialEq)]` and subsequent "special" fields with `#[extract(<behavior>)]`. This results in those methods being generated at compile time significantly reducing the boilerplate needed:
 
 ```rust
 use nom_xml::{
@@ -293,4 +293,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
-Note: in the latter example, `book.update_fields(&doc)?;` is used in `main{...}` instead of manually iterating over the document. This compile-time-generated method is essentially doing that work for you. For more examples and tests in [`nom-xml`](https://github.com/RodogInfinite/NomExML)
+Note: in the latter example, `book.update_fields(&doc)?;` is used in `main(){...}` instead of manually iterating over the document. This compile-time-generated method is essentially doing that work for you. For more, see the examples and tests in [`nom-xml`](https://github.com/RodogInfinite/NomExML).
+
+# Currently Supported Field Types:
+- `String`
+- `Vec<String>`
+- `Vec<Numerical Types>`
+- `Vec<User Structs>`
+- `Option` //should work with any variation of the above
+
+Note: This is an extremely edge-case-heavy macro. If you're experiencing any errors, please submit an issue.
