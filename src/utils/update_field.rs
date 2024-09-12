@@ -525,7 +525,6 @@ impl GenerateFields for FieldTypes<OptionVecField> {
     }
 }
 
-//TODO: FIX THIS
 impl GenerateFields for FieldTypes<OptionVecOptionField> {
     fn generate_fields(&self) -> Result<Option<TokenStream>, syn::Error> {
         let gen_fields: Vec<TokenStream> = self
