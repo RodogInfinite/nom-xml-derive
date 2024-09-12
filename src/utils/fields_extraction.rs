@@ -515,11 +515,9 @@ impl<'a> FieldsContextRefs<'a> {
                                             gt_token: _,
                                         },
                                     ) => {
-                                        // dbg!("DEF HERE");
                                             self.attributed_opt_fields
                                                 .fields
                                                 .push(field_ident.clone());
-                                            // dbg!(&self.attributed_opt_fields);
                                             if let Some(replacement) = &replacement {
                                                 self.attributed_opt_fields.replacements.insert(
                                                     field_ident.clone(),
