@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 keywords = ["xml","derive","nom-xml"]
 categories = ["parsing","encoding","decoding"]
 description = "A Rust crate for simplifying the process of extracting `nom-xml` Documents into structs with fields of various Rust data types."
-repository = "https://github.com/RodogInfinite/binary_type_cast"
+repository = "https://github.com/RodogInfinite/nom-xml-derive"
 
 [lib]
 proc-macro = true
