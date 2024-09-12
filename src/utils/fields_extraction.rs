@@ -26,7 +26,7 @@ pub struct NonAttributedOptionField;
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SubField;
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct SubOptionField;
+pub struct OptionSubField;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct VecField;
@@ -515,9 +515,11 @@ impl<'a> FieldsContextRefs<'a> {
                                             gt_token: _,
                                         },
                                     ) => {
+                                        // dbg!("DEF HERE");
                                             self.attributed_opt_fields
                                                 .fields
                                                 .push(field_ident.clone());
+                                            // dbg!(&self.attributed_opt_fields);
                                             if let Some(replacement) = &replacement {
                                                 self.attributed_opt_fields.replacements.insert(
                                                     field_ident.clone(),
@@ -777,7 +779,7 @@ fn extract_optional_arguments(
                         arguments,
                         field_ident,
                         ty_ident,
-                        ctx.sub_opt_fields,
+                        ctx.opt_sub_fields,
                         replacement,
                     )
                 }
@@ -853,7 +855,7 @@ fn extract_optional_arguments(
                                         };
                                         Ok(())
                                     } else {
-                                        ctx.sub_opt_fields.extract_arguments(
+                                        ctx.opt_sub_fields.extract_arguments(
                                             arguments,
                                             field_ident,
                                             ident,
@@ -875,7 +877,7 @@ fn extract_optional_arguments(
     }
 }
 
-fn extract_sub_optional_field_arguments(
+fn extract_optional_sub_field_arguments(
     arguments: &PathArguments,
     field_ident: &Ident,
     _ty_ident: &Ident,
@@ -990,7 +992,7 @@ fn extract_vec_field_arguments(
                     if !arguments.is_empty() {
                         match ident.to_string().as_str() {
                             "Option" => {
-                                extract_sub_optional_field_arguments(
+                                extract_optional_sub_field_arguments(
                                     arguments,
                                     field_ident,
                                     ty_ident,
